@@ -1,6 +1,6 @@
 import type { Core } from "@strapi/strapi";
 import { errors } from "@strapi/utils";
-import { checkProperty, listProperties, type HsObject } from "./properties";
+import { checkProperty, loadSchema, resolveObjects } from "./properties";
 import { publicSettings, resolveApiKey, setStoredSettings } from "./settings";
 
 /**
@@ -28,6 +28,9 @@ interface ValidateTarget {
 const config = {
   default: {
     apiKey: "",
+    // Objects whose properties are offered. Names from the standard set, or
+    // `{ name, path }` for a custom object type.
+    objects: ["contact", "company"] as unknown[],
     validate: [] as ValidateTarget[],
   },
   validator(cfg: { validate?: unknown }) {
@@ -44,14 +47,17 @@ const controllers = {
       if (!apiKey) {
         // Not an error: a fresh install simply has no key yet, and the field
         // must degrade to free text rather than block the editor.
-        ctx.body = { configured: false, properties: [] };
+        ctx.body = { configured: false, properties: [], objects: [], unavailable: [] };
         return;
       }
       try {
-        const properties = await listProperties(strapi, apiKey, {
-          force: ctx.query.refresh === "1",
-        });
-        ctx.body = { configured: true, properties };
+        const schema = await loadSchema(
+          strapi,
+          apiKey,
+          resolveObjects(strapi.plugin("hubspot").config("objects", [])),
+          { force: ctx.query.refresh === "1" },
+        );
+        ctx.body = { configured: true, ...schema };
       } catch (err) {
         strapi.log.error(`[hubspot] ${(err as Error).message}`);
         ctx.throw(502, "Impossible de joindre HubSpot — vérifiez la clé API.");
@@ -98,8 +104,8 @@ const routes = {
 function collectMappings(
   node: unknown,
   target: ValidateTarget,
-  found: { object: HsObject; property: string }[] = [],
-): { object: HsObject; property: string }[] {
+  found: { object: string; property: string }[] = [],
+): { object: string; property: string }[] {
   if (Array.isArray(node)) {
     for (const item of node) collectMappings(item, target, found);
     return found;
@@ -109,8 +115,9 @@ function collectMappings(
   const obj = node as Record<string, unknown>;
   const property = obj[target.propertyField];
   if (typeof property === "string" && property.trim()) {
+    const object = obj[target.objectField];
     found.push({
-      object: obj[target.objectField] === "company" ? "company" : "contact",
+      object: typeof object === "string" && object ? object : "contact",
       property,
     });
   }
@@ -148,9 +155,13 @@ export default {
         const { apiKey } = await resolveApiKey(strapi);
         if (!apiKey) return next(); // Nothing to validate against — never block.
 
-        let properties;
+        let schema;
         try {
-          properties = await listProperties(strapi, apiKey);
+          schema = await loadSchema(
+            strapi,
+            apiKey,
+            resolveObjects(strapi.plugin("hubspot").config("objects", [])),
+          );
         } catch {
           // HubSpot unreachable: saving content must not depend on their uptime.
           strapi.log.warn("[hubspot] schéma indisponible — validation ignorée");
@@ -158,7 +169,7 @@ export default {
         }
 
         const problems = mappings
-          .map((m) => checkProperty(properties, m.object, m.property))
+          .map((m) => checkProperty(schema.properties, m.object, m.property))
           .filter((reason): reason is string => Boolean(reason));
 
         if (problems.length) {

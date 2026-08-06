@@ -35,8 +35,7 @@ This plugin makes all three impossible to save.
 ### A property picker instead of a text field
 
 Replace your property field's type with the `hubspot.property` custom field.
-Editors then search the real, writable properties of your portal, each labelled
-with the object it belongs to:
+Editors then search the real, writable properties of your portal:
 
 ```
 Contact · Rôle (hs_role)
@@ -44,9 +43,24 @@ Contact · Prénom (firstname)
 Société · Nombre d'employés (numberofemployees)
 ```
 
+**The list narrows to the object you picked.** Point the field at the sibling
+that holds the object and choosing *Contact* leaves only contact properties —
+the prefix disappears, since it is no longer telling you anything:
+
+```json
+{
+  "hsProperty": {
+    "type": "customField",
+    "customField": "plugin::hubspot.property",
+    "options": { "objectField": "hsObject" }
+  }
+}
+```
+
 Read-only properties — the ones HubSpot computes and always refuses to
 accept — are filtered out, so the list only ever offers things that will
-actually work.
+actually work. When the portal id is readable, each selected property gets a
+**Voir dans HubSpot** link straight to its settings page.
 
 ### Validation on save
 
@@ -64,6 +78,11 @@ never returned to the browser: the UI only receives whether a key exists, where
 it comes from, and its last four characters. A "Test connection" button
 round-trips to HubSpot and reports how many properties it can read.
 
+> **On storage:** the key is kept in Strapi's core store, which is **not
+> encrypted at rest** — it is readable by anyone with database access. It never
+> reaches the browser, but treat it like any other secret in your database. Use
+> `HUBSPOT_API_KEY` if your deployment already manages secrets properly.
+
 ## Install
 
 ```bash
@@ -80,6 +99,12 @@ export default ({ env }) => ({
       // Optional — the key can also be set from Settings → HubSpot.
       apiKey: env("HUBSPOT_API_KEY", ""),
 
+      // Optional — objects whose properties are offered.
+      // Defaults to ["contact", "company"]. Standard names: contact, company,
+      // deal, ticket, product, line_item, quote. A custom object is either its
+      // type id, or { name, path } when the two differ.
+      objects: ["contact", "company", "deal"],
+
       // Optional — entries whose mappings are validated on save.
       validate: [
         {
@@ -94,13 +119,15 @@ export default ({ env }) => ({
 ```
 
 Then point your property field at the custom field, in the component or content
-type that holds it:
+type that holds it. `options.objectField` names the sibling holding the object —
+omit it and the picker simply lists every object's properties:
 
 ```json
 {
   "hsProperty": {
     "type": "customField",
-    "customField": "plugin::hubspot.property"
+    "customField": "plugin::hubspot.property",
+    "options": { "objectField": "hsObject" }
   }
 }
 ```
@@ -109,10 +136,16 @@ Restart Strapi and hard-refresh the admin.
 
 ### The token
 
-Create a **private app** in HubSpot with these scopes:
+Create a **private app** in HubSpot with a read scope per object you list:
 
 - `crm.schemas.contacts.read`
 - `crm.schemas.companies.read`
+- `crm.schemas.deals.read`, `crm.schemas.custom.read`… as needed
+
+An object the token can't read is **skipped, not fatal**: the picker keeps
+working for the others and explains which one is missing a scope. `oauth` is
+worth adding too — it exposes the portal id, which turns on the *view in HubSpot*
+links.
 
 The key is resolved in this order, first match wins:
 
@@ -140,6 +173,8 @@ This one never blocks work:
 | No API key configured | The field falls back to a plain text input, with a note explaining why |
 | HubSpot unreachable | Saving proceeds; validation is skipped and a warning is logged |
 | Property staged in HubSpot but not created yet | The picker accepts a typed value (`creatable`) |
+| An object's scope is missing | That object is skipped; the others still work |
+| Portal id unreadable | Deep links are omitted; everything else is unaffected |
 | Plugin uninstalled | Values remain as strings — nothing to undo |
 
 The property schema is cached for 10 minutes and de-duplicated across concurrent
@@ -152,7 +187,7 @@ All routes require an authenticated admin.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/hubspot/properties` | Writable properties of both objects. `?refresh=1` bypasses the cache |
+| `GET` | `/hubspot/properties` | Writable properties, readable objects, unreachable ones and the portal id. `?refresh=1` bypasses the cache |
 | `GET` | `/hubspot/settings` | Whether a key exists, its source and hint — never the key |
 | `PUT` | `/hubspot/settings` | Save a key (`{ apiKey }`) |
 | `DELETE` | `/hubspot/settings` | Remove the stored key |
