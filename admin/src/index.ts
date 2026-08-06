@@ -1,15 +1,23 @@
 import { PLUGIN_ID } from "./pluginId";
 
 /**
- * Registers the `hubspot.property` custom field: a searchable picker fed by the
- * portal's real schema, in place of a free-text CRM property name.
+ * Registers two things:
  *
- * NOTE: the Input component must be an async function returning the module —
- * React.lazy here crashes the admin silently (same trap as link-graph's menu link).
+ *  - the `hubspot.property` custom field — a searchable picker fed by the
+ *    portal's real schema, in place of a free-text CRM property name;
+ *  - a Settings → HubSpot section holding the private app token.
+ *
+ * NOTE: the Component/Input entries must be async functions returning the
+ * module. React.lazy here crashes the admin silently — empty #strapi, no
+ * console error — the same trap link-graph hit with its menu link.
  */
 export default {
   register(app: {
     customFields: { register: (field: unknown) => void };
+    createSettingSection: (
+      section: { id: string; intlLabel: { id: string; defaultMessage: string } },
+      links: unknown[],
+    ) => void;
     registerPlugin: (plugin: { id: string; name: string }) => void;
   }) {
     app.customFields.register({
@@ -29,6 +37,22 @@ export default {
       },
       options: {},
     });
+
+    app.createSettingSection(
+      {
+        id: PLUGIN_ID,
+        intlLabel: { id: `${PLUGIN_ID}.settings.section`, defaultMessage: "HubSpot" },
+      },
+      [
+        {
+          intlLabel: { id: `${PLUGIN_ID}.settings.link`, defaultMessage: "Configuration" },
+          id: `${PLUGIN_ID}-settings`,
+          to: `/settings/${PLUGIN_ID}`,
+          permissions: [],
+          Component: async () => (await import("./pages/Settings")).default,
+        },
+      ],
+    );
 
     app.registerPlugin({ id: PLUGIN_ID, name: PLUGIN_ID });
   },

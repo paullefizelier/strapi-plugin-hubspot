@@ -2,7 +2,13 @@
   "name": "strapi-plugin-hubspot",
   "version": "0.1.0",
   "description": "HubSpot integration for Strapi — pick CRM properties from a searchable list instead of typing them, and catch bad mappings before they reach the API.",
-  "keywords": ["strapi", "plugin", "hubspot", "crm", "custom-field"],
+  "keywords": [
+    "strapi",
+    "plugin",
+    "hubspot",
+    "crm",
+    "custom-field"
+  ],
   "license": "MIT",
   "author": "Paul Lefizelier",
   "type": "commonjs",
@@ -23,11 +29,14 @@
       "default": "./dist/server/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "strapi-plugin build",
     "watch": "strapi-plugin watch",
-    "verify": "strapi-plugin verify"
+    "verify": "strapi-plugin verify",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "@strapi/design-system": "^2.0.0-rc.29",
@@ -35,6 +44,7 @@
     "@strapi/sdk-plugin": "^5.3.2",
     "@strapi/strapi": "^5.0.0",
     "@strapi/typescript-utils": "^5.0.0",
+    "@strapi/utils": "^5.0.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "react": "^18.3.1",
@@ -47,6 +57,7 @@
     "@strapi/design-system": "^2.0.0-rc.29",
     "@strapi/icons": "^2.0.0-rc.29",
     "@strapi/strapi": "^5.0.0",
+    "@strapi/utils": "^5.0.0",
     "react": "^17.0.0 || ^18.0.0",
     "react-dom": "^17.0.0 || ^18.0.0",
     "styled-components": "^6.0.0"
@@ -57,5 +68,7 @@
     "displayName": "HubSpot",
     "description": "Pick HubSpot CRM properties from a searchable list, and validate mappings on save."
   },
-  "engines": { "node": ">=18.0.0" }
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }
