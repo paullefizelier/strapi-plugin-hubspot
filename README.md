@@ -144,8 +144,16 @@ Create a **private app** in HubSpot with a read scope per object you list:
 
 An object the token can't read is **skipped, not fatal**: the picker keeps
 working for the others and explains which one is missing a scope. `oauth` is
-worth adding too — it exposes the portal id, which turns on the *view in HubSpot*
-links.
+worth adding too — it exposes the portal id *and the portal's UI host*, which
+turn on the *view in HubSpot* links.
+
+### Regions
+
+The REST API is global: `api.hubapi.com` routes by token, whatever the portal's
+hosting region. The **web app is not** — an EU-hosted portal lives on
+`app-eu1.hubspot.com`. Deep links are built from the `uiDomain` HubSpot reports
+for your portal rather than a hardcoded host, so they point at the right region
+without any configuration.
 
 The key is resolved in this order, first match wins:
 

@@ -53,6 +53,13 @@ export interface Schema {
   unavailable: { object: string; reason: string }[];
   /** Enables deep links into the CRM; derived from the token, never configured. */
   portalId?: number;
+  /**
+   * Region-specific UI host for this portal (`app-eu1.hubspot.com`…). The REST
+   * API is global — `api.hubapi.com` routes by token — but the web app is not,
+   * so a link built on `app.hubspot.com` lands on the wrong host for any portal
+   * hosted outside NA.
+   */
+  uiDomain?: string;
 }
 
 interface RawProperty {
@@ -99,15 +106,19 @@ async function fetchObject(apiKey: string, object: HsObjectDef): Promise<HsPrope
     }));
 }
 
-/** Portal id behind the token — used for deep links, never for authentication. */
-async function fetchPortalId(apiKey: string): Promise<number | undefined> {
+/** Portal identity behind the token — used for deep links, never for auth. */
+async function fetchAccount(
+  apiKey: string,
+): Promise<{ portalId?: number; uiDomain?: string }> {
   try {
-    const { portalId } = await hsGet<{ portalId?: number }>(apiKey, "/account-info/v3/details");
-    return portalId;
+    return await hsGet<{ portalId?: number; uiDomain?: string }>(
+      apiKey,
+      "/account-info/v3/details",
+    );
   } catch {
     // A token without `oauth` scope can still read properties; deep links are
     // simply omitted rather than the whole schema failing.
-    return undefined;
+    return {};
   }
 }
 
@@ -162,11 +173,13 @@ export async function loadSchema(
         (a, b) => a.object.localeCompare(b.object) || a.label.localeCompare(b.label),
       );
 
+      const account = await fetchAccount(apiKey);
       const schema: Schema = {
         properties,
         objects: available,
         unavailable,
-        portalId: await fetchPortalId(apiKey),
+        portalId: account.portalId,
+        uiDomain: account.uiDomain,
       };
       cache = { at: Date.now(), schema };
       return schema;

@@ -18,6 +18,7 @@ interface SchemaResponse {
   objects: string[];
   unavailable: { object: string; reason: string }[];
   portalId?: number;
+  uiDomain?: string;
 }
 
 interface InputProps {
@@ -119,10 +120,14 @@ const HubspotPropertyInput = React.forwardRef<HTMLInputElement, InputProps>(
       return hint;
     };
 
-    /** Deep link to the property in HubSpot, when the portal id is known. */
+    /**
+     * Deep link to the property in HubSpot, when the portal id is known.
+     * Built on the portal's own UI host: the REST API is global, but the web app
+     * is regional, so `app.hubspot.com` is wrong for an EU- or AP-hosted portal.
+     */
     const crmLink =
       schema?.portalId && value && schema.properties.some((p) => p.name === value)
-        ? `https://app.hubspot.com/property-settings/${schema.portalId}/properties?search=${encodeURIComponent(value)}`
+        ? `https://${schema.uiDomain || "app.hubspot.com"}/property-settings/${schema.portalId}/properties?search=${encodeURIComponent(value)}`
         : null;
 
     return (
