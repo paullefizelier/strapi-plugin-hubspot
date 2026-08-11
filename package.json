@@ -44,6 +44,8 @@
     "build": "strapi-plugin build",
     "watch": "strapi-plugin watch",
     "verify": "strapi-plugin verify",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
@@ -59,7 +61,8 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.0",
     "styled-components": "^6.1.11",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^3.2.4"
   },
   "peerDependencies": {
     "@strapi/design-system": "^2.0.0-rc.29",

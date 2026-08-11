@@ -91,12 +91,23 @@ each `{ value?, label? }`) and they are checked too.
 Each problem is also carried as a structured code in the error's `details`, so a
 host app can localize the message instead of parsing the sentence.
 
+**`unknown` is the one code a legitimate workflow can produce** — a property
+staged in HubSpot but not created yet. Set `strict: false` on a validate target
+and those pass with a warning in the logs instead of blocking the save. The
+other three codes always block, whatever `strict` says: no workflow produces a
+wrong object, a trailing space, or a drifted option on purpose.
+
 ### A settings screen
 
 **Settings → HubSpot** holds the private app token. It is stored server-side and
 never returned to the browser: the UI only receives whether a key exists, where
 it comes from, and its last four characters. A "Test connection" button
 round-trips to HubSpot and reports how many properties it can read.
+
+Access is gated by a dedicated RBAC permission — **Settings →
+Roles → Plugins → Hubspot**. A role without it neither sees the settings link
+nor can call the settings routes; reading properties stays open to every
+authenticated admin, since the picker needs it in the Content Manager.
 
 > **On storage:** the key is kept in Strapi's core store, which is **not
 > encrypted at rest** — it is readable by anyone with database access. It never
@@ -132,6 +143,8 @@ export default ({ env }) => ({
           objectField: "hsObject",     // holds "contact" | "company"
           propertyField: "hsProperty", // holds the property name
           optionsField: "options",     // optional — the field's choices
+          strict: true,                // optional — false lets `unknown`
+                                       // properties through with a warning
         },
       ],
     },
@@ -201,7 +214,7 @@ This one never blocks work:
 |---|---|
 | No API key configured | The field falls back to a plain text input, with a note explaining why |
 | HubSpot unreachable | Saving proceeds; validation is skipped and a warning is logged |
-| Property staged in HubSpot but not created yet | The picker accepts a typed value (`creatable`) |
+| Property staged in HubSpot but not created yet | The picker accepts a typed value (`creatable`); set `strict: false` on the validate target so the save passes too |
 | An object's scope is missing | That object is skipped; the others still work |
 | Portal id unreadable | Deep links are omitted; everything else is unaffected |
 | Plugin uninstalled | Values remain as strings — nothing to undo |
@@ -212,7 +225,8 @@ key drops the cache immediately.
 
 ## Admin API
 
-All routes require an authenticated admin.
+All routes require an authenticated admin; the settings routes additionally
+require the `plugin::hubspot.settings` RBAC permission.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -220,6 +234,22 @@ All routes require an authenticated admin.
 | `GET` | `/hubspot/settings` | Whether a key exists, its source and hint — never the key |
 | `PUT` | `/hubspot/settings` | Save a key (`{ apiKey }`) |
 | `DELETE` | `/hubspot/settings` | Remove the stored key |
+
+## i18n
+
+The admin UI ships in English and French, keyed on the Strapi admin locale.
+Server-side error messages stay in English; the structured codes in the
+error's `details` are the localization hook for host apps.
+
+## Tests
+
+```bash
+npm test
+```
+
+Vitest over the server logic: mapping checks, deep collection through dynamic
+zones and repeatables, schema loading (cache, concurrent de-duplication,
+missing scopes) and the strict/non-strict save middleware.
 
 ## Compatibility
 

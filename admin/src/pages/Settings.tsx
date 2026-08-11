@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useIntl } from "react-intl";
 import {
   Badge,
   Box,
@@ -10,6 +11,7 @@ import {
 } from "@strapi/design-system";
 import { useFetchClient } from "@strapi/strapi/admin";
 import { PLUGIN_ID } from "../pluginId";
+import { getTranslation } from "../getTranslation";
 
 /**
  * HubSpot settings: the private app token, saved server-side in the plugin store.
@@ -26,13 +28,8 @@ interface Settings {
   hint: string;
 }
 
-const SOURCE_LABEL: Record<NonNullable<Settings["keySource"]>, string> = {
-  settings: "saisie ici",
-  config: "config/plugins.ts",
-  env: "variable d'environnement",
-};
-
 const HubspotSettings = () => {
+  const { formatMessage } = useIntl();
   const { get, put, del } = useFetchClient();
   const [settings, setSettings] = React.useState<Settings | null>(null);
   const [apiKey, setApiKey] = React.useState("");
@@ -41,13 +38,19 @@ const HubspotSettings = () => {
     null,
   );
 
+  const t = (id: string, defaultMessage: string, values?: Record<string, string | number>) =>
+    formatMessage({ id: getTranslation(id), defaultMessage }, values);
+
   const load = React.useCallback(async () => {
     const { data } = await get<Settings>(`/${PLUGIN_ID}/settings`);
     setSettings(data);
   }, [get]);
 
   React.useEffect(() => {
-    load().catch(() => setFeedback({ tone: "danger", text: "Réglages illisibles." }));
+    load().catch(() =>
+      setFeedback({ tone: "danger", text: t("settings.load-error", "Could not load settings.") }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
   const save = async () => {
@@ -57,9 +60,9 @@ const HubspotSettings = () => {
       const { data } = await put<Settings>(`/${PLUGIN_ID}/settings`, { apiKey });
       setSettings(data);
       setApiKey("");
-      setFeedback({ tone: "success", text: "Clé enregistrée." });
+      setFeedback({ tone: "success", text: t("settings.saved", "Key saved.") });
     } catch {
-      setFeedback({ tone: "danger", text: "Enregistrement impossible." });
+      setFeedback({ tone: "danger", text: t("settings.save-error", "Could not save the key.") });
     } finally {
       setBusy(false);
     }
@@ -72,9 +75,9 @@ const HubspotSettings = () => {
       const { data } = await del<Settings>(`/${PLUGIN_ID}/settings`);
       setSettings(data);
       setApiKey("");
-      setFeedback({ tone: "success", text: "Clé supprimée." });
+      setFeedback({ tone: "success", text: t("settings.removed", "Key removed.") });
     } catch {
-      setFeedback({ tone: "danger", text: "Suppression impossible." });
+      setFeedback({ tone: "danger", text: t("settings.remove-error", "Could not remove the key.") });
     } finally {
       setBusy(false);
     }
@@ -90,11 +93,19 @@ const HubspotSettings = () => {
       );
       setFeedback(
         data.configured
-          ? { tone: "success", text: `Connexion établie — ${data.properties.length} propriétés lisibles.` }
-          : { tone: "danger", text: "Aucune clé configurée." },
+          ? {
+              tone: "success",
+              text: t("settings.test-ok", "Connection established — {count} readable properties.", {
+                count: data.properties.length,
+              }),
+            }
+          : { tone: "danger", text: t("settings.test-no-key", "No key configured.") },
       );
     } catch {
-      setFeedback({ tone: "danger", text: "HubSpot injoignable — clé invalide ou révoquée ?" });
+      setFeedback({
+        tone: "danger",
+        text: t("settings.test-error", "HubSpot unreachable — invalid or revoked key?"),
+      });
     } finally {
       setBusy(false);
     }
@@ -103,10 +114,16 @@ const HubspotSettings = () => {
   if (!settings) {
     return (
       <Box padding={8}>
-        <Loader small>Chargement…</Loader>
+        <Loader small>{t("settings.loading", "Loading…")}</Loader>
       </Box>
     );
   }
+
+  const sourceLabel: Record<NonNullable<Settings["keySource"]>, string> = {
+    settings: t("settings.source.settings", "set here"),
+    config: t("settings.source.config", "config/plugins.ts"),
+    env: t("settings.source.env", "environment variable"),
+  };
 
   return (
     <Box padding={8}>
@@ -114,18 +131,22 @@ const HubspotSettings = () => {
         <Flex direction="column" alignItems="flex-start" gap={2}>
           <Typography variant="alpha">HubSpot</Typography>
           <Typography variant="epsilon" textColor="neutral600">
-            Le jeton d'application privée utilisé pour lire les propriétés du portail
-            et valider les mappings de formulaires.
+            {t(
+              "settings.subtitle",
+              "The private app token used to read the portal's properties and validate form mappings.",
+            )}
           </Typography>
         </Flex>
 
         <Flex gap={2} alignItems="center">
           <Badge active={settings.configured}>
-            {settings.configured ? `Configurée ${settings.hint}` : "Non configurée"}
+            {settings.configured
+              ? t("settings.configured", "Configured {hint}", { hint: settings.hint })
+              : t("settings.not-configured", "Not configured")}
           </Badge>
           {settings.keySource ? (
             <Typography variant="pi" textColor="neutral600">
-              source : {SOURCE_LABEL[settings.keySource]}
+              {t("settings.source", "source: {source}", { source: sourceLabel[settings.keySource] })}
             </Typography>
           ) : null}
         </Flex>
@@ -133,14 +154,21 @@ const HubspotSettings = () => {
         <Box maxWidth="32rem">
           <Field.Root
             name="apiKey"
-            hint="Saisir une clé ici remplace celles venant de config/plugins.ts et de HUBSPOT_API_KEY."
+            hint={t(
+              "settings.key.hint",
+              "A key entered here overrides the ones from config/plugins.ts and HUBSPOT_API_KEY.",
+            )}
           >
-            <Field.Label>Jeton d'application privée</Field.Label>
+            <Field.Label>{t("settings.key.label", "Private app token")}</Field.Label>
             <Field.Input
               type="password"
               value={apiKey}
               autoComplete="off"
-              placeholder={settings.configured ? "•••••••• (laisser vide pour conserver)" : "pat-eu1-…"}
+              placeholder={
+                settings.configured
+                  ? t("settings.key.placeholder.set", "•••••••• (leave empty to keep)")
+                  : t("settings.key.placeholder.empty", "pat-eu1-…")
+              }
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setApiKey(e.target.value)}
             />
             <Field.Hint />
@@ -149,10 +177,10 @@ const HubspotSettings = () => {
 
         <Flex gap={2}>
           <Button onClick={save} loading={busy} disabled={!apiKey.trim()}>
-            Enregistrer
+            {t("settings.save", "Save")}
           </Button>
           <Button variant="secondary" onClick={test} loading={busy} disabled={!settings.configured}>
-            Tester la connexion
+            {t("settings.test", "Test connection")}
           </Button>
           <Button
             variant="danger-light"
@@ -160,7 +188,7 @@ const HubspotSettings = () => {
             loading={busy}
             disabled={settings.keySource !== "settings"}
           >
-            Supprimer
+            {t("settings.remove", "Remove")}
           </Button>
         </Flex>
 
@@ -175,10 +203,10 @@ const HubspotSettings = () => {
 
         <Box paddingTop={4}>
           <Typography variant="pi" textColor="neutral600">
-            Le jeton a besoin des portées <b>crm.schemas.contacts.read</b> et{" "}
-            <b>crm.schemas.companies.read</b> pour lister les propriétés. Il n'est jamais
-            renvoyé au navigateur : seuls son existence, sa provenance et ses quatre
-            derniers caractères le sont.
+            {t(
+              "settings.scopes",
+              "The token needs the crm.schemas.contacts.read and crm.schemas.companies.read scopes to list properties. It is never returned to the browser: only its existence, its source and its last four characters are.",
+            )}
           </Typography>
         </Box>
       </Flex>

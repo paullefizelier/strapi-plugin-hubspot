@@ -1,4 +1,5 @@
 import { PLUGIN_ID } from "./pluginId";
+import { prefixPluginTranslations } from "./getTranslation";
 
 /**
  * Registers two things:
@@ -26,11 +27,11 @@ export default {
       type: "string",
       intlLabel: {
         id: `${PLUGIN_ID}.property.label`,
-        defaultMessage: "Propriété HubSpot",
+        defaultMessage: "HubSpot property",
       },
       intlDescription: {
         id: `${PLUGIN_ID}.property.description`,
-        defaultMessage: "Choisie dans les propriétés réelles du portail",
+        defaultMessage: "Picked from the portal's real properties",
       },
       components: {
         Input: async () => import("./components/HubspotPropertyInput"),
@@ -79,12 +80,27 @@ export default {
           intlLabel: { id: `${PLUGIN_ID}.settings.link`, defaultMessage: "Configuration" },
           id: `${PLUGIN_ID}-settings`,
           to: `/settings/${PLUGIN_ID}`,
-          permissions: [],
+          // Mirrors the RBAC action registered server-side: a role without it
+          // doesn't see the link at all — the routes refuse it anyway.
+          permissions: [{ action: `plugin::${PLUGIN_ID}.settings`, subject: null }],
           Component: async () => (await import("./pages/Settings")).default,
         },
       ],
     );
 
     app.registerPlugin({ id: PLUGIN_ID, name: PLUGIN_ID });
+  },
+
+  async registerTrads({ locales }: { locales: string[] }) {
+    return Promise.all(
+      locales.map(async (locale) => {
+        try {
+          const { default: data } = await import(`./translations/${locale}.json`);
+          return { data: prefixPluginTranslations(data), locale };
+        } catch {
+          return { data: {}, locale };
+        }
+      }),
+    );
   },
 };

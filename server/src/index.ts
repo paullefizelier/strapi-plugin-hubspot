@@ -1,13 +1,7 @@
 import type { Core } from "@strapi/strapi";
-import { errors } from "@strapi/utils";
-import {
-  checkMapping,
-  describeProblem,
-  loadSchema,
-  resolveObjects,
-  type Mapping,
-} from "./properties";
+import { loadSchema, resolveObjects } from "./properties";
 import { publicSettings, resolveApiKey, setStoredSettings } from "./settings";
+import { makeValidationMiddleware, type ValidateTarget } from "./validation";
 
 /**
  * Plugin configuration (config/plugins.ts of the host app):
@@ -25,17 +19,8 @@ import { publicSettings, resolveApiKey, setStoredSettings } from "./settings";
  * The API key set from the admin UI takes precedence over both.
  */
 
-interface ValidateTarget {
-  uid: string;
-  objectField: string;
-  propertyField: string;
-  /**
-   * Repeatable holding the values a field can submit (default `options`), each
-   * `{ value?, label? }`. Checked against enumeration properties: a select whose
-   * choices drifted from HubSpot fails exactly like an unknown property.
-   */
-  optionsField?: string;
-}
+/** RBAC action gating the settings screen and its routes. */
+const SETTINGS_ACTION = "plugin::hubspot.settings";
 
 const config = {
   default: {
@@ -93,11 +78,18 @@ const controllers = {
   }),
 };
 
-const adminRoute = (method: string, path: string, handler: string) => ({
+const adminRoute = (method: string, path: string, handler: string, actions?: string[]) => ({
   method,
   path,
   handler,
-  config: { policies: ["admin::isAuthenticatedAdmin"] },
+  config: {
+    policies: [
+      "admin::isAuthenticatedAdmin",
+      // The token is a portal-wide secret; reading properties is not. Only the
+      // settings routes carry the extra permission.
+      ...(actions ? [{ name: "admin::hasPermissions", config: { actions } }] : []),
+    ],
+  },
 });
 
 const routes = {
@@ -105,48 +97,12 @@ const routes = {
     type: "admin",
     routes: [
       adminRoute("GET", "/properties", "properties.list"),
-      adminRoute("GET", "/settings", "settings.get"),
-      adminRoute("PUT", "/settings", "settings.update"),
-      adminRoute("DELETE", "/settings", "settings.reset"),
+      adminRoute("GET", "/settings", "settings.get", [SETTINGS_ACTION]),
+      adminRoute("PUT", "/settings", "settings.update", [SETTINGS_ACTION]),
+      adminRoute("DELETE", "/settings", "settings.reset", [SETTINGS_ACTION]),
     ],
   },
 };
-
-/** Every `{ object, property }` pair found anywhere in an entry, at any depth. */
-function collectMappings(
-  node: unknown,
-  target: ValidateTarget,
-  found: Mapping[] = [],
-): Mapping[] {
-  if (Array.isArray(node)) {
-    for (const item of node) collectMappings(item, target, found);
-    return found;
-  }
-  if (!node || typeof node !== "object") return found;
-
-  const obj = node as Record<string, unknown>;
-  const property = obj[target.propertyField];
-  if (typeof property === "string" && property.trim()) {
-    const object = obj[target.objectField];
-    const rawOptions = obj[target.optionsField || "options"];
-    const values = Array.isArray(rawOptions)
-      ? rawOptions
-          .map((o) => {
-            const opt = (o ?? {}) as { value?: unknown; label?: unknown };
-            const v = typeof opt.value === "string" && opt.value.trim() ? opt.value : opt.label;
-            return typeof v === "string" ? v.trim() : "";
-          })
-          .filter(Boolean)
-      : undefined;
-    found.push({
-      object: typeof object === "string" && object ? object : "contact",
-      property,
-      values,
-    });
-  }
-  for (const value of Object.values(obj)) collectMappings(value, target, found);
-  return found;
-}
 
 export default {
   config,
@@ -163,51 +119,19 @@ export default {
     });
   },
 
-  bootstrap({ strapi }: { strapi: Core.Strapi }) {
+  async bootstrap({ strapi }: { strapi: Core.Strapi }) {
+    await strapi.service("admin::permission").actionProvider.registerMany([
+      {
+        section: "plugins",
+        displayName: "Access the HubSpot settings",
+        uid: "settings",
+        pluginName: "hubspot",
+      },
+    ]);
+
     const targets = strapi.plugin("hubspot").config("validate", []) as ValidateTarget[];
-    if (!targets.length) return;
-
     for (const target of targets) {
-      strapi.documents.use(async (context, next) => {
-        const isWrite = ["create", "update"].includes(context.action);
-        if (!isWrite || context.uid !== target.uid) return next();
-
-        const mappings = collectMappings((context.params as { data?: unknown })?.data, target);
-        if (!mappings.length) return next();
-
-        const { apiKey } = await resolveApiKey(strapi);
-        if (!apiKey) return next(); // Nothing to validate against — never block.
-
-        let schema;
-        try {
-          schema = await loadSchema(
-            strapi,
-            apiKey,
-            resolveObjects(strapi.plugin("hubspot").config("objects", [])),
-          );
-        } catch {
-          // HubSpot unreachable: saving content must not depend on their uptime.
-          strapi.log.warn("[hubspot] schema unavailable — validation skipped");
-          return next();
-        }
-
-        const problems = mappings
-          .map((m) => checkMapping(schema.properties, m))
-          .filter((p): p is NonNullable<typeof p> => Boolean(p));
-
-        if (problems.length) {
-          // A ValidationError surfaces as a readable message in the Content
-          // Manager; a plain Error would show an opaque 500 instead. The
-          // structured problems ride along in `details` so a host app can
-          // localize them without parsing the sentence.
-          const sentences = [...new Set(problems.map(describeProblem))];
-          throw new errors.ValidationError(
-            `Invalid HubSpot mapping — ${sentences.join("; ")}`,
-            { problems },
-          );
-        }
-        return next();
-      });
+      strapi.documents.use(makeValidationMiddleware(strapi, target));
     }
   },
 };

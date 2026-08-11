@@ -1,7 +1,9 @@
 import * as React from "react";
+import { useIntl } from "react-intl";
 import { Combobox, ComboboxOption, Field, Flex, Loader, Link } from "@strapi/design-system";
 import { useFetchClient, useField } from "@strapi/strapi/admin";
 import { PLUGIN_ID } from "../pluginId";
+import { getTranslation } from "../getTranslation";
 import { objectLabel } from "../objectLabels";
 
 interface HsProperty {
@@ -49,6 +51,8 @@ interface InputProps {
  */
 const HubspotPropertyInput = React.forwardRef<HTMLInputElement, InputProps>(
   ({ name, value, onChange, attribute, disabled, error, required, label, hint, labelAction }, ref) => {
+    const intl = useIntl();
+    const { formatMessage } = intl;
     const { get } = useFetchClient();
     const [schema, setSchema] = React.useState<SchemaResponse | null>(null);
     const [loadError, setLoadError] = React.useState("");
@@ -72,11 +76,18 @@ const HubspotPropertyInput = React.forwardRef<HTMLInputElement, InputProps>(
         .catch((err: { response?: { data?: { error?: { message?: string } } } }) => {
           if (cancelled) return;
           setSchema({ configured: false, properties: [], objects: [], unavailable: [] });
-          setLoadError(err?.response?.data?.error?.message ?? "Propriétés HubSpot indisponibles");
+          setLoadError(
+            err?.response?.data?.error?.message ??
+              formatMessage({
+                id: getTranslation("picker.load-error"),
+                defaultMessage: "HubSpot properties unavailable",
+              }),
+          );
         });
       return () => {
         cancelled = true;
       };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [get]);
 
     // Combobox hands back `undefined` when cleared — normalize to an empty string
@@ -92,7 +103,7 @@ const HubspotPropertyInput = React.forwardRef<HTMLInputElement, InputProps>(
         // The object prefix is redundant once filtered, and noisy.
         label: selectedObject
           ? `${p.label} (${p.name})`
-          : `${objectLabel(p.object)} · ${p.label} (${p.name})`,
+          : `${objectLabel(intl, p.object)} · ${p.label} (${p.name})`,
       }));
       // A stored value the portal doesn't know (typed before the plugin, since
       // deleted in HubSpot, or belonging to another object) must stay selectable,
@@ -102,20 +113,35 @@ const HubspotPropertyInput = React.forwardRef<HTMLInputElement, InputProps>(
         shown.unshift({
           value,
           label: elsewhere
-            ? `${value} — appartient à ${objectLabel(elsewhere.object)}`
-            : `${value} — inconnue du portail`,
+            ? formatMessage(
+                { id: getTranslation("picker.belongs-to"), defaultMessage: "{property} — belongs to {object}" },
+                { property: value, object: objectLabel(intl, elsewhere.object) },
+              )
+            : formatMessage(
+                { id: getTranslation("picker.unknown"), defaultMessage: "{property} — unknown to the portal" },
+                { property: value },
+              ),
         });
       }
       return shown;
-    }, [schema, selectedObject, value]);
+    }, [schema, selectedObject, value, intl, formatMessage]);
 
     const describe = (): React.ReactNode => {
       if (loadError) return loadError;
       if (schema && !schema.configured) {
-        return "Aucune clé API HubSpot — saisie libre. Renseignez-la dans Réglages → HubSpot.";
+        return formatMessage({
+          id: getTranslation("picker.not-configured"),
+          defaultMessage: "No HubSpot API key — free text. Set it in Settings → HubSpot.",
+        });
       }
       if (selectedObject && schema?.unavailable.some((u) => u.object === selectedObject)) {
-        return `Propriétés de « ${objectLabel(selectedObject)} » illisibles — portée manquante sur le jeton.`;
+        return formatMessage(
+          {
+            id: getTranslation("picker.object-unavailable"),
+            defaultMessage: "Properties of “{object}” unreadable — missing scope on the token.",
+          },
+          { object: objectLabel(intl, selectedObject) },
+        );
       }
       return hint;
     };
@@ -136,7 +162,12 @@ const HubspotPropertyInput = React.forwardRef<HTMLInputElement, InputProps>(
 
         {!schema ? (
           <Flex paddingTop={2} paddingBottom={2}>
-            <Loader small>Chargement des propriétés HubSpot…</Loader>
+            <Loader small>
+              {formatMessage({
+                id: getTranslation("picker.loading"),
+                defaultMessage: "Loading HubSpot properties…",
+              })}
+            </Loader>
           </Flex>
         ) : schema.configured ? (
           <Combobox
@@ -145,7 +176,10 @@ const HubspotPropertyInput = React.forwardRef<HTMLInputElement, InputProps>(
             onChange={emit}
             onClear={() => emit("")}
             disabled={disabled}
-            placeholder="Rechercher une propriété…"
+            placeholder={formatMessage({
+              id: getTranslation("picker.placeholder"),
+              defaultMessage: "Search a property…",
+            })}
             // Lets an editor keep a property staged in HubSpot but not created
             // yet, instead of being locked out.
             creatable
@@ -163,14 +197,20 @@ const HubspotPropertyInput = React.forwardRef<HTMLInputElement, InputProps>(
             value={value || ""}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => emit(e.target.value)}
             disabled={disabled}
-            placeholder="ex. hs_role, numberofemployees"
+            placeholder={formatMessage({
+              id: getTranslation("picker.free-placeholder"),
+              defaultMessage: "e.g. hs_role, numberofemployees",
+            })}
           />
         )}
 
         {crmLink ? (
           <Flex paddingTop={1}>
             <Link href={crmLink} isExternal>
-              Voir dans HubSpot
+              {formatMessage({
+                id: getTranslation("picker.view"),
+                defaultMessage: "View in HubSpot",
+              })}
             </Link>
           </Flex>
         ) : null}
