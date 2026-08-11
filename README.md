@@ -59,10 +59,45 @@ setting reads:
 }
 ```
 
+Once filtered, the list is ordered and prefixed by the property's **HubSpot
+group** — the portal's own way of organising hundreds of properties:
+
+```
+Informations de contact · Prénom (firstname)
+Informations de contact · Rôle (hs_role)
+Historique · Source (hs_analytics_source)
+```
+
 Read-only properties — the ones HubSpot computes and always refuses to
 accept — are filtered out, so the list only ever offers things that will
 actually work. When the portal id is readable, each selected property gets a
 **Voir dans HubSpot** link straight to its settings page.
+
+### An object picker to feed it
+
+The sibling object field doesn't have to be a hand-typed enum: the
+`hubspot.object` custom field is a select over the portal's configured
+objects. An object the token can't read stays selectable, flagged with its
+missing scope.
+
+```json
+{
+  "hsObject": {
+    "type": "customField",
+    "customField": "plugin::hubspot.object"
+  }
+}
+```
+
+### One-click option import
+
+For an **enumeration** property, the picker shows an *Import the N options
+from HubSpot* button that fills the sibling repeatable (default `options`,
+entries `{ value, label }` — the same shape the validation reads) with the
+enumeration's real choices. The `bad-option` check detects a select that
+drifted from the CRM; this is what fixes it. Point `optionsField` (in the
+field's HubSpot options, next to `objectField`) at the repeatable if it isn't
+called `options`.
 
 ### Validation on save
 

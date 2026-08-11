@@ -64,9 +64,43 @@ export default {
                   defaultMessage: "hsObject",
                 },
               },
+              {
+                name: "options.optionsField",
+                type: "text",
+                intlLabel: {
+                  id: `${PLUGIN_ID}.options.optionsField.label`,
+                  defaultMessage: "Options field",
+                },
+                description: {
+                  id: `${PLUGIN_ID}.options.optionsField.description`,
+                  defaultMessage:
+                    "Name of the sibling repeatable holding this field's choices (value/label entries), filled by the import button on enumeration properties. Defaults to \"options\".",
+                },
+                placeholder: {
+                  id: `${PLUGIN_ID}.options.optionsField.placeholder`,
+                  defaultMessage: "options",
+                },
+              },
             ],
           },
         ],
+      },
+    });
+
+    app.customFields.register({
+      name: "object",
+      pluginId: PLUGIN_ID,
+      type: "string",
+      intlLabel: {
+        id: `${PLUGIN_ID}.object.label`,
+        defaultMessage: "HubSpot object",
+      },
+      intlDescription: {
+        id: `${PLUGIN_ID}.object.description`,
+        defaultMessage: "Picked from the portal's configured objects",
+      },
+      components: {
+        Input: async () => import("./components/HubspotObjectInput"),
       },
     });
 

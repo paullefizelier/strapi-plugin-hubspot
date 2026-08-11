@@ -137,10 +137,15 @@ export default {
   routes,
 
   register({ strapi }: { strapi: Core.Strapi }) {
-    // Backed by a plain string: existing hand-typed values stay valid, and
+    // Backed by plain strings: existing hand-typed values stay valid, and
     // uninstalling the plugin leaves readable data behind.
     strapi.customFields.register({
       name: "property",
+      plugin: "hubspot",
+      type: "string",
+    });
+    strapi.customFields.register({
+      name: "object",
       plugin: "hubspot",
       type: "string",
     });

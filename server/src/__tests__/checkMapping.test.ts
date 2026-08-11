@@ -15,7 +15,7 @@ const properties: HsProperty[] = [
     label: "Rôle",
     object: "contact",
     type: "enumeration",
-    options: ["dev", "designer"],
+    options: [{ value: "dev", label: "Développeur" }, { value: "designer" }],
   },
   {
     name: "hs_tags",

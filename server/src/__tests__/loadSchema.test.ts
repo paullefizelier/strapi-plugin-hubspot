@@ -3,9 +3,10 @@ import type { Core } from "@strapi/strapi";
 import { clearCache, loadSchema, resolveObjects } from "../properties";
 
 /**
- * `loadSchema` hits two HubSpot endpoints: `/crm/v3/properties/<path>` per
- * object and `/account-info/v3/details` once. The mock routes by URL so each
- * test declares what the portal looks like.
+ * `loadSchema` hits three HubSpot endpoints: `/crm/v3/properties/<path>` and
+ * `/crm/v3/properties/<path>/groups` per object, `/account-info/v3/details`
+ * once. The mock routes by URL so each test declares what the portal looks
+ * like; an unmocked groups endpoint 404s, which degrades to raw group names.
  */
 
 const strapi = {
@@ -43,9 +44,13 @@ const contactProps = {
       label: "Rôle",
       type: "enumeration",
       groupName: "contactinformation",
-      options: [{ value: "dev" }, { value: "designer" }],
+      options: [{ value: "dev", label: "Développeur" }, { value: "designer" }],
     },
   ],
+};
+
+const contactGroups = {
+  results: [{ name: "contactinformation", label: "Contact information" }],
 };
 
 const companyProps = {
@@ -69,6 +74,7 @@ describe("loadSchema", () => {
   it("returns writable properties sorted by object then label, with portal identity", async () => {
     mockHubspot({
       "/crm/v3/properties/contacts": { status: 200, body: contactProps },
+      "/crm/v3/properties/contacts/groups": { status: 200, body: contactGroups },
       "/crm/v3/properties/companies": { status: 200, body: companyProps },
       "/account-info/v3/details": { status: 200, body: account },
     });
@@ -88,9 +94,22 @@ describe("loadSchema", () => {
     ]);
     expect(schema.properties.find((p) => p.name === "hs_role")).toMatchObject({
       object: "contact",
-      options: ["dev", "designer"],
-      group: "contactinformation",
+      options: [{ value: "dev", label: "Développeur" }, { value: "designer" }],
+      // The display label from the groups endpoint, not the raw name.
+      group: "Contact information",
     });
+  });
+
+  it("degrades to raw group names when the groups endpoint is unreadable", async () => {
+    mockHubspot({
+      "/crm/v3/properties/contacts": { status: 200, body: contactProps },
+      "/crm/v3/properties/companies": { status: 200, body: companyProps },
+      "/account-info/v3/details": { status: 200, body: account },
+    });
+
+    const schema = await loadSchema(strapi, "key", OBJECTS);
+
+    expect(schema.properties.find((p) => p.name === "hs_role")?.group).toBe("contactinformation");
   });
 
   it("skips an unreadable object instead of failing the whole schema", async () => {
@@ -164,8 +183,8 @@ describe("loadSchema", () => {
     ]);
 
     expect(a).toBe(b);
-    // 2 property endpoints + 1 account endpoint — once, not twice.
-    expect(fetchMock.mock.calls.length).toBe(3);
+    // 2 property endpoints + 2 groups endpoints + 1 account endpoint — once, not twice.
+    expect(fetchMock.mock.calls.length).toBe(5);
   });
 
   it("drops the cache after clearCache", async () => {
@@ -179,6 +198,6 @@ describe("loadSchema", () => {
     clearCache();
     await loadSchema(strapi, "key", OBJECTS);
 
-    expect(fetchMock.mock.calls.length).toBe(6);
+    expect(fetchMock.mock.calls.length).toBe(10);
   });
 });

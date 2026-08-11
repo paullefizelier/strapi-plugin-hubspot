@@ -33,6 +33,12 @@ export const STANDARD_OBJECTS: HsObjectDef[] = [
   { name: "quote", path: "quotes" },
 ];
 
+export interface HsPropertyOption {
+  value: string;
+  /** Human label, when HubSpot has one — used when importing options into Strapi. */
+  label?: string;
+}
+
 export interface HsProperty {
   name: string;
   label: string;
@@ -40,8 +46,8 @@ export interface HsProperty {
   object: string;
   type?: string;
   /** Allowed values, for enumeration properties. */
-  options: string[];
-  /** HubSpot's own grouping, shown to help editors locate a property. */
+  options: HsPropertyOption[];
+  /** HubSpot's own grouping (display label), shown to help editors locate a property. */
   group?: string;
 }
 
@@ -67,7 +73,7 @@ interface RawProperty {
   label?: string;
   type?: string;
   groupName?: string;
-  options?: { value: string }[];
+  options?: { value: string; label?: string }[];
   modificationMetadata?: { readOnlyValue?: boolean };
 }
 
@@ -87,11 +93,28 @@ async function hsGet<T>(apiKey: string, path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * Group display labels for an object. The property payload only carries the raw
+ * group *name* (`contactinformation`); the labels live on their own endpoint.
+ * Failing to read them is cosmetic, so it degrades to the raw names.
+ */
+async function fetchGroups(apiKey: string, path: string): Promise<Record<string, string>> {
+  try {
+    const res = await hsGet<{ results?: { name: string; label?: string }[] }>(
+      apiKey,
+      `/crm/v3/properties/${path}/groups`,
+    );
+    return Object.fromEntries((res.results ?? []).map((g) => [g.name, g.label || g.name]));
+  } catch {
+    return {};
+  }
+}
+
 async function fetchObject(apiKey: string, object: HsObjectDef): Promise<HsProperty[]> {
-  const res = await hsGet<{ results?: RawProperty[] }>(
-    apiKey,
-    `/crm/v3/properties/${object.path}`,
-  );
+  const [res, groups] = await Promise.all([
+    hsGet<{ results?: RawProperty[] }>(apiKey, `/crm/v3/properties/${object.path}`),
+    fetchGroups(apiKey, object.path),
+  ]);
   return (res.results ?? [])
     // Read-only properties are computed by HubSpot; writing them always fails,
     // so offering them in the picker would only invite mistakes.
@@ -101,8 +124,8 @@ async function fetchObject(apiKey: string, object: HsObjectDef): Promise<HsPrope
       label: p.label || p.name,
       object: object.name,
       type: p.type,
-      options: (p.options ?? []).map((o) => o.value),
-      group: p.groupName,
+      options: (p.options ?? []).map((o) => ({ value: o.value, label: o.label })),
+      group: p.groupName ? (groups[p.groupName] ?? p.groupName) : undefined,
     }));
 }
 
@@ -238,7 +261,8 @@ export function checkMapping(properties: HsProperty[], mapping: Mapping): Proble
   // An enumeration refuses a value outside its list just as hard as it refuses
   // an unknown property, so a select whose options drifted is the same failure.
   if (match.type === "enumeration" && match.options.length && mapping.values?.length) {
-    const stray = mapping.values.filter((v) => v && !match.options.includes(v));
+    const allowed = match.options.map((o) => o.value);
+    const stray = mapping.values.filter((v) => v && !allowed.includes(v));
     if (stray.length) {
       return { code: "bad-option", property: trimmed, object, values: stray };
     }

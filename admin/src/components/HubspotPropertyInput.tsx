@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useIntl } from "react-intl";
-import { Combobox, ComboboxOption, Field, Flex, Loader, Link } from "@strapi/design-system";
+import { Button, Combobox, ComboboxOption, Field, Flex, Loader, Link, Typography } from "@strapi/design-system";
 import { useFetchClient, useField } from "@strapi/strapi/admin";
 import { PLUGIN_ID } from "../pluginId";
 import { getTranslation } from "../getTranslation";
@@ -11,6 +11,7 @@ interface HsProperty {
   label: string;
   object: string;
   type?: string;
+  options: { value: string; label?: string }[];
   group?: string;
 }
 
@@ -27,7 +28,7 @@ interface InputProps {
   name: string;
   value?: string;
   onChange: (event: { target: { name: string; value: string; type: string } }) => void;
-  attribute?: { options?: { objectField?: string } };
+  attribute?: { options?: { objectField?: string; optionsField?: string } };
   disabled?: boolean;
   error?: string;
   required?: boolean;
@@ -67,6 +68,16 @@ const HubspotPropertyInput = React.forwardRef<HTMLInputElement, InputProps>(
     const siblingField = useField<string>(siblingPath);
     const selectedObject = siblingField?.value;
 
+    // The repeatable holding the choices this field offers — the import button
+    // fills it from the enumeration's real options.
+    const optionsFieldName = attribute?.options?.optionsField || "options";
+    const optionsPath = React.useMemo(
+      () => name.replace(/[^.]+$/, optionsFieldName),
+      [name, optionsFieldName],
+    );
+    const optionsField = useField<unknown>(optionsPath);
+    const [imported, setImported] = React.useState(false);
+
     React.useEffect(() => {
       let cancelled = false;
       get<SchemaResponse>(`/${PLUGIN_ID}/properties`)
@@ -98,11 +109,19 @@ const HubspotPropertyInput = React.forwardRef<HTMLInputElement, InputProps>(
     const options = React.useMemo(() => {
       const all = schema?.properties ?? [];
       const scoped = selectedObject ? all.filter((p) => p.object === selectedObject) : all;
-      const shown = scoped.map((p) => ({
+      // Once filtered to one object, its HubSpot group takes over as the
+      // locating prefix — the portal's own way of organising hundreds of
+      // properties — and the list is ordered by it.
+      const sorted = selectedObject
+        ? [...scoped].sort(
+            (a, b) =>
+              (a.group ?? "").localeCompare(b.group ?? "") || a.label.localeCompare(b.label),
+          )
+        : scoped;
+      const shown = sorted.map((p) => ({
         value: p.name,
-        // The object prefix is redundant once filtered, and noisy.
         label: selectedObject
-          ? `${p.label} (${p.name})`
+          ? `${p.group ? `${p.group} · ` : ""}${p.label} (${p.name})`
           : `${objectLabel(intl, p.object)} · ${p.label} (${p.name})`,
       }));
       // A stored value the portal doesn't know (typed before the plugin, since
@@ -156,6 +175,37 @@ const HubspotPropertyInput = React.forwardRef<HTMLInputElement, InputProps>(
         ? `https://${schema.uiDomain || "app.hubspot.com"}/property-settings/${schema.portalId}/properties?search=${encodeURIComponent(value)}`
         : null;
 
+    const selectedProperty =
+      value && schema
+        ? schema.properties.find(
+            (p) => p.name === value && (!selectedObject || p.object === selectedObject),
+          )
+        : undefined;
+
+    // The `bad-option` check only *detects* a select whose choices drifted from
+    // the enumeration; this closes the loop by writing the real options into
+    // the sibling repeatable.
+    const importable =
+      selectedProperty?.type === "enumeration" && (selectedProperty.options?.length ?? 0) > 0;
+
+    React.useEffect(() => setImported(false), [value]);
+
+    const importOptions = () => {
+      if (!selectedProperty || !optionsField) return;
+      // The Content Manager keys repeatable rows on __temp_key__ (fractional
+      // indexing); providing them keeps the rows renderable, and the CM strips
+      // them before saving.
+      const rows = selectedProperty.options.map((o, i) => ({
+        __temp_key__: `a${i}`,
+        value: o.value,
+        label: o.label ?? o.value,
+      }));
+      optionsField.onChange({
+        target: { name: optionsPath, value: rows, type: "json" },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+      setImported(true);
+    };
+
     return (
       <Field.Root name={name} error={error} hint={describe()} required={required}>
         <Field.Label action={labelAction}>{label}</Field.Label>
@@ -204,14 +254,35 @@ const HubspotPropertyInput = React.forwardRef<HTMLInputElement, InputProps>(
           />
         )}
 
-        {crmLink ? (
-          <Flex paddingTop={1}>
-            <Link href={crmLink} isExternal>
-              {formatMessage({
-                id: getTranslation("picker.view"),
-                defaultMessage: "View in HubSpot",
-              })}
-            </Link>
+        {crmLink || importable ? (
+          <Flex paddingTop={1} gap={3} alignItems="center" wrap="wrap">
+            {importable ? (
+              <Button variant="tertiary" size="S" onClick={importOptions} disabled={disabled}>
+                {formatMessage(
+                  {
+                    id: getTranslation("picker.import"),
+                    defaultMessage: "Import the {count} options from HubSpot",
+                  },
+                  { count: selectedProperty?.options.length ?? 0 },
+                )}
+              </Button>
+            ) : null}
+            {imported ? (
+              <Typography variant="pi" textColor="success600">
+                {formatMessage({
+                  id: getTranslation("picker.imported"),
+                  defaultMessage: "Options imported — save to keep them.",
+                })}
+              </Typography>
+            ) : null}
+            {crmLink ? (
+              <Link href={crmLink} isExternal>
+                {formatMessage({
+                  id: getTranslation("picker.view"),
+                  defaultMessage: "View in HubSpot",
+                })}
+              </Link>
+            ) : null}
           </Flex>
         ) : null}
 
