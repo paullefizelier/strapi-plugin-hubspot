@@ -1,4 +1,5 @@
 import type { Core } from "@strapi/strapi";
+import { runAudit } from "./audit";
 import { loadSchema, resolveObjects } from "./properties";
 import { publicSettings, resolveApiKey, setStoredSettings } from "./settings";
 import { makeValidationMiddleware, type ValidateTarget } from "./validation";
@@ -62,6 +63,31 @@ const controllers = {
     },
   }),
 
+  audit: ({ strapi }: { strapi: Core.Strapi }) => ({
+    async run(ctx: { body: unknown; throw: (s: number, m: string) => never }) {
+      const { apiKey } = await resolveApiKey(strapi);
+      if (!apiKey) {
+        ctx.body = { configured: false, targets: [] };
+        return;
+      }
+      const targets = strapi.plugin("hubspot").config("validate", []) as ValidateTarget[];
+      try {
+        // Forced refresh: an audit reports the portal as it is now, not as the
+        // cache remembers it — a property deleted five minutes ago must show.
+        const schema = await loadSchema(
+          strapi,
+          apiKey,
+          resolveObjects(strapi.plugin("hubspot").config("objects", [])),
+          { force: true },
+        );
+        ctx.body = { configured: true, targets: await runAudit(strapi, targets, schema) };
+      } catch (err) {
+        strapi.log.error(`[hubspot] audit failed — ${(err as Error).message}`);
+        ctx.throw(502, "Cannot reach HubSpot — check the API key.");
+      }
+    },
+  }),
+
   settings: ({ strapi }: { strapi: Core.Strapi }) => ({
     async get(ctx: { body: unknown }) {
       ctx.body = await publicSettings(strapi);
@@ -97,6 +123,7 @@ const routes = {
     type: "admin",
     routes: [
       adminRoute("GET", "/properties", "properties.list"),
+      adminRoute("GET", "/audit", "audit.run", [SETTINGS_ACTION]),
       adminRoute("GET", "/settings", "settings.get", [SETTINGS_ACTION]),
       adminRoute("PUT", "/settings", "settings.update", [SETTINGS_ACTION]),
       adminRoute("DELETE", "/settings", "settings.reset", [SETTINGS_ACTION]),

@@ -97,6 +97,19 @@ and those pass with a warning in the logs instead of blocking the save. The
 other three codes always block, whatever `strict` says: no workflow produces a
 wrong object, a trailing space, or a drifted option on purpose.
 
+### An audit of existing content
+
+Save-time validation only protects entries as they are written. A property
+deleted in HubSpot afterwards leaves invalid mappings dormant in content nobody
+re-saves — until a submission silently fails. **Settings → HubSpot → Mapping
+audit** walks every entry of the validated content types (drafts, every locale,
+at any depth) against a freshly fetched schema, and lists each entry the portal
+would reject today, linking straight to it in the Content Manager.
+
+The audit reports `unknown` properties even on `strict: false` targets: strict
+only decides whether a save is blocked, not whether the mapping would reach the
+CRM.
+
 ### A settings screen
 
 **Settings → HubSpot** holds the private app token. It is stored server-side and
@@ -231,6 +244,7 @@ require the `plugin::hubspot.settings` RBAC permission.
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/hubspot/properties` | Writable properties, readable objects, unreachable ones and the portal id. `?refresh=1` bypasses the cache |
+| `GET` | `/hubspot/audit` | Scans every entry of the validated content types and returns the invalid mappings, per entry |
 | `GET` | `/hubspot/settings` | Whether a key exists, its source and hint — never the key |
 | `PUT` | `/hubspot/settings` | Save a key (`{ apiKey }`) |
 | `DELETE` | `/hubspot/settings` | Remove the stored key |

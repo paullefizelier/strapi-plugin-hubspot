@@ -12,6 +12,7 @@ import {
 import { useFetchClient } from "@strapi/strapi/admin";
 import { PLUGIN_ID } from "../pluginId";
 import { getTranslation } from "../getTranslation";
+import AuditSection from "../components/AuditSection";
 
 /**
  * HubSpot settings: the private app token, saved server-side in the plugin store.
@@ -209,6 +210,8 @@ const HubspotSettings = () => {
             )}
           </Typography>
         </Box>
+
+        <AuditSection configured={settings.configured} />
       </Flex>
     </Box>
   );
