@@ -1,6 +1,6 @@
 {
   "name": "strapi-plugin-hubspot",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "HubSpot integration for Strapi — pick CRM properties from a searchable list filtered by object, and catch bad mappings before they reach the API.",
   "keywords": [
     "strapi",

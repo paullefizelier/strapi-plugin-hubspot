@@ -24,6 +24,20 @@ interface SchemaResponse {
   uiDomain?: string;
 }
 
+/**
+ * Above 100 options with no filter typed, the design system virtualizes the
+ * dropdown with a fixed 40px row estimate and no re-measure — a label that
+ * wraps to two lines overlaps the next row and gets clipped. One line +
+ * ellipsis keeps every row at the height the virtualizer assumes; the full
+ * text stays available on hover, and `textValue` keeps the search working.
+ */
+const oneLine: React.CSSProperties = {
+  display: "block",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
 interface InputProps {
   name: string;
   value?: string;
@@ -236,8 +250,10 @@ const HubspotPropertyInput = React.forwardRef<HTMLInputElement, InputProps>(
             onCreateOption={emit}
           >
             {options.map((o) => (
-              <ComboboxOption key={o.value} value={o.value}>
-                {o.label}
+              <ComboboxOption key={o.value} value={o.value} textValue={o.label}>
+                <span title={o.label} style={oneLine}>
+                  {o.label}
+                </span>
               </ComboboxOption>
             ))}
           </Combobox>
