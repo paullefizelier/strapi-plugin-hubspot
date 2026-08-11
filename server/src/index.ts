@@ -1,7 +1,9 @@
 import type { Core } from "@strapi/strapi";
 import { runAudit } from "./audit";
+import contentTypes from "./content-types";
 import { loadSchema, resolveObjects } from "./properties";
 import { publicSettings, resolveApiKey, setStoredSettings } from "./settings";
+import { createSubmitService, FAILURE_UID } from "./submit";
 import { makeValidationMiddleware, type ValidateTarget } from "./validation";
 
 /**
@@ -88,6 +90,18 @@ const controllers = {
     },
   }),
 
+  failures: ({ strapi }: { strapi: Core.Strapi }) => ({
+    async list(ctx: { body: unknown }) {
+      const total = (await strapi
+        .documents(FAILURE_UID as never)
+        .count({} as never)) as unknown as number;
+      ctx.body = { total };
+    },
+    async retry(ctx: { body: unknown }) {
+      ctx.body = await strapi.plugin("hubspot").service("submit").retryFailures();
+    },
+  }),
+
   settings: ({ strapi }: { strapi: Core.Strapi }) => ({
     async get(ctx: { body: unknown }) {
       ctx.body = await publicSettings(strapi);
@@ -124,6 +138,8 @@ const routes = {
     routes: [
       adminRoute("GET", "/properties", "properties.list"),
       adminRoute("GET", "/audit", "audit.run", [SETTINGS_ACTION]),
+      adminRoute("GET", "/failures", "failures.list", [SETTINGS_ACTION]),
+      adminRoute("POST", "/failures/retry", "failures.retry", [SETTINGS_ACTION]),
       adminRoute("GET", "/settings", "settings.get", [SETTINGS_ACTION]),
       adminRoute("PUT", "/settings", "settings.update", [SETTINGS_ACTION]),
       adminRoute("DELETE", "/settings", "settings.reset", [SETTINGS_ACTION]),
@@ -133,8 +149,13 @@ const routes = {
 
 export default {
   config,
+  contentTypes,
   controllers,
   routes,
+
+  services: {
+    submit: ({ strapi }: { strapi: Core.Strapi }) => createSubmitService(strapi),
+  },
 
   register({ strapi }: { strapi: Core.Strapi }) {
     // Backed by plain strings: existing hand-typed values stay valid, and

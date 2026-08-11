@@ -145,6 +145,44 @@ The audit reports `unknown` properties even on `strict: false` targets: strict
 only decides whether a save is blocked, not whether the mapping would reach the
 CRM.
 
+### A sending service
+
+The host app doesn't have to talk to HubSpot itself — the plugin exposes the
+upsert, with everything above applied on the way out:
+
+```ts
+const result = await strapi.plugin("hubspot").service("submit").upsert({
+  object: "contact",
+  idProperty: "email", // find-or-create key
+  properties: {
+    email: "jane@acme.com",
+    firstname: "Jane",
+    hs_role: "dev;designer", // multi-select values use HubSpot's `;` separator
+  },
+});
+// { ok: true, id: "…" }
+// { ok: false, problems: [{ code: "unknown", … }] }  — refused before sending
+// { ok: false, queued: true, error: "…" }            — parked for replay
+```
+
+The payload is validated against the portal schema **before** it is sent —
+the same checks as on save, values coerced to strings, empty ones dropped.
+Then:
+
+- a **permanent refusal** (4xx) comes back as `{ ok: false, error }` with
+  HubSpot's message — retrying can't fix a wrong payload, so nothing is queued;
+- a **transient failure** (429, 5xx, network) is retried twice with backoff,
+  then parked in **Content Manager → HubSpot failed submissions** and reported
+  as `{ ok: false, queued: true }`.
+
+`service("submit").retryFailures()` replays the queue, oldest first — from a
+cron in the host app, or the **Replay now** button in Settings → HubSpot. A
+replay that succeeds removes the row; one that keeps failing stays, with its
+error and attempt count, until it works or an admin deletes it.
+
+Sending needs write scopes on the token: `crm.objects.contacts.write` (and
+its equivalent per object you send to).
+
 ### A settings screen
 
 **Settings → HubSpot** holds the private app token. It is stored server-side and
@@ -280,6 +318,8 @@ require the `plugin::hubspot.settings` RBAC permission.
 |---|---|---|
 | `GET` | `/hubspot/properties` | Writable properties, readable objects, unreachable ones and the portal id. `?refresh=1` bypasses the cache |
 | `GET` | `/hubspot/audit` | Scans every entry of the validated content types and returns the invalid mappings, per entry |
+| `GET` | `/hubspot/failures` | Number of parked submissions |
+| `POST` | `/hubspot/failures/retry` | Replays the parked submissions and reports the outcome |
 | `GET` | `/hubspot/settings` | Whether a key exists, its source and hint — never the key |
 | `PUT` | `/hubspot/settings` | Save a key (`{ apiKey }`) |
 | `DELETE` | `/hubspot/settings` | Remove the stored key |
