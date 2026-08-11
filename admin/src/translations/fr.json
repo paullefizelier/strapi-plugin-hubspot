@@ -24,6 +24,7 @@
   "picker.belongs-to": "{property} — appartient à {object}",
   "picker.unknown": "{property} — inconnue du portail",
   "picker.view": "Voir dans HubSpot",
+  "picker.no-results": "Aucune propriété correspondante — les propriétés se gèrent dans HubSpot.",
   "picker.import": "Importer les {count} options depuis HubSpot",
   "picker.imported": "Options importées — enregistrez pour les conserver.",
   "settings.subtitle": "Le jeton d'application privée utilisé pour lire les propriétés du portail et valider les mappings de formulaires.",

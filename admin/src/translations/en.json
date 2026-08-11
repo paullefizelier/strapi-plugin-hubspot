@@ -24,6 +24,7 @@
   "picker.belongs-to": "{property} — belongs to {object}",
   "picker.unknown": "{property} — unknown to the portal",
   "picker.view": "View in HubSpot",
+  "picker.no-results": "No matching property — properties are managed in HubSpot.",
   "picker.import": "Import the {count} options from HubSpot",
   "picker.imported": "Options imported — save to keep them.",
   "settings.subtitle": "The private app token used to read the portal's properties and validate form mappings.",

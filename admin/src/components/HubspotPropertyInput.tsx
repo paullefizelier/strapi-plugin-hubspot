@@ -244,10 +244,20 @@ const HubspotPropertyInput = React.forwardRef<HTMLInputElement, InputProps>(
               id: getTranslation("picker.placeholder"),
               defaultMessage: "Search a property…",
             })}
-            // Lets an editor keep a property staged in HubSpot but not created
-            // yet, instead of being locked out.
-            creatable
-            onCreateOption={emit}
+            // The default filter is prefix-based, and every label starts with
+            // its group ("Contact information · …") — searching a property by
+            // its own name would never match. `contains` searches anywhere in
+            // the label, technical name included.
+            autocomplete={{ type: "list", filter: "contains" }}
+            // No `creatable`: properties are managed in HubSpot, never invented
+            // here — offering to "create" one only manufactures an invalid
+            // mapping that validation would then refuse.
+            noOptionsMessage={() =>
+              formatMessage({
+                id: getTranslation("picker.no-results"),
+                defaultMessage: "No matching property — properties are managed in HubSpot.",
+              })
+            }
           >
             {options.map((o) => (
               <ComboboxOption key={o.value} value={o.value} textValue={o.label}>

@@ -126,11 +126,13 @@ each `{ value?, label? }`) and they are checked too.
 Each problem is also carried as a structured code in the error's `details`, so a
 host app can localize the message instead of parsing the sentence.
 
-**`unknown` is the one code a legitimate workflow can produce** — a property
-staged in HubSpot but not created yet. Set `strict: false` on a validate target
-and those pass with a warning in the logs instead of blocking the save. The
-other three codes always block, whatever `strict` says: no workflow produces a
-wrong object, a trailing space, or a drifted option on purpose.
+**`unknown` is the one code a legitimate workflow can produce** — a mapping
+written before its property was deleted in HubSpot, or content created through
+the API against a property staged but not created yet. Set `strict: false` on a
+validate target and those pass with a warning in the logs instead of blocking
+the save. The other three codes always block, whatever `strict` says: no
+workflow produces a wrong object, a trailing space, or a drifted option on
+purpose.
 
 ### An audit of existing content
 
@@ -300,7 +302,7 @@ This one never blocks work:
 |---|---|
 | No API key configured | The field falls back to a plain text input, with a note explaining why |
 | HubSpot unreachable | Saving proceeds; validation is skipped and a warning is logged |
-| Property staged in HubSpot but not created yet | The picker accepts a typed value (`creatable`); set `strict: false` on the validate target so the save passes too |
+| Property staged in HubSpot but not created yet | Not offered — properties are managed in HubSpot, the picker never invents one. A value already stored (e.g. written via the API) passes the save if the target sets `strict: false` |
 | An object's scope is missing | That object is skipped; the others still work |
 | Portal id unreadable | Deep links are omitted; everything else is unaffected |
 | Plugin uninstalled | Values remain as strings — nothing to undo |
