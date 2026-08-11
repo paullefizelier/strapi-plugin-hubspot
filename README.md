@@ -44,8 +44,10 @@ Société · Nombre d'employés (numberofemployees)
 ```
 
 **The list narrows to the object you picked.** Point the field at the sibling
-that holds the object and choosing *Contact* leaves only contact properties —
-the prefix disappears, since it is no longer telling you anything:
+that holds the object — from the Content-Type Builder, under *HubSpot → Object
+field* — and choosing *Contact* leaves only contact properties. The prefix
+disappears, since it is no longer telling you anything. In `schema.json` that
+setting reads:
 
 ```json
 {
@@ -69,7 +71,25 @@ entry before it is written, at any depth — steps, repeatable components, dynam
 zones. An invalid mapping is refused with a message that says which property and
 why:
 
-> Mapping HubSpot invalide — « name » existe sur l'objet Société, pas sur Contact
+> Invalid HubSpot mapping — "name" exists on company, not on contact
+
+It catches four things:
+
+| Code | Case |
+|---|---|
+| `unknown` | The property doesn't exist in the portal |
+| `wrong-object` | It exists, but on another object |
+| `whitespace` | It exists, but the stored value has surrounding spaces |
+| `bad-option` | The field offers a choice the enumeration doesn't accept |
+
+That last one closes a real hole: HubSpot refuses a value outside an
+enumeration exactly as hard as it refuses an unknown property, so a select whose
+choices drifted from the CRM fails at send time with nothing to show for it.
+Point `optionsField` at the repeatable holding the choices (default `options`,
+each `{ value?, label? }`) and they are checked too.
+
+Each problem is also carried as a structured code in the error's `details`, so a
+host app can localize the message instead of parsing the sentence.
 
 ### A settings screen
 
@@ -111,6 +131,7 @@ export default ({ env }) => ({
           uid: "api::form.form",
           objectField: "hsObject",     // holds "contact" | "company"
           propertyField: "hsProperty", // holds the property name
+          optionsField: "options",     // optional — the field's choices
         },
       ],
     },

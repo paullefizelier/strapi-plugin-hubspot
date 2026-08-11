@@ -158,7 +158,7 @@ export async function loadSchema(
       for (const entry of settled) {
         if ("error" in entry && entry.error) {
           unavailable.push({ object: entry.object.name, reason: entry.error });
-          strapi.log.warn(`[hubspot] ${entry.object.name} illisible — ${entry.error}`);
+          strapi.log.warn(`[hubspot] ${entry.object.name} unreadable — ${entry.error}`);
           continue;
         }
         available.push(entry.object.name);
@@ -166,7 +166,7 @@ export async function loadSchema(
       }
 
       if (!available.length) {
-        throw new Error(unavailable[0]?.reason ?? "Aucun objet lisible");
+        throw new Error(unavailable[0]?.reason ?? "No readable object");
       }
 
       properties.sort(
@@ -196,26 +196,71 @@ export function clearCache(): void {
   cache = null;
 }
 
+/** A mapping the portal would reject, and why. */
+export type Problem =
+  | { code: "unknown"; property: string; object: string }
+  | { code: "wrong-object"; property: string; object: string; actualObject: string }
+  | { code: "whitespace"; property: string; object: string }
+  | { code: "bad-option"; property: string; object: string; values: string[] };
+
+export interface Mapping {
+  object: string;
+  property: string;
+  /** Values the field can submit — checked against enumeration properties. */
+  values?: string[];
+}
+
 /**
- * Why a property can't be written, or `null` when it's fine. Returning a reason
- * rather than a boolean lets the caller tell an editor what to fix.
+ * Why a mapping can't be written, or `null` when it's fine.
+ *
+ * Returns a structured code rather than a sentence: the message is rendered by
+ * the caller, so the wording stays in one place and stays translatable. The
+ * codes are also carried in the ValidationError details, for anyone localizing.
  */
-export function checkProperty(
-  properties: HsProperty[],
-  object: string,
-  name: string,
-): string | null {
-  const trimmed = name.trim();
+export function checkMapping(properties: HsProperty[], mapping: Mapping): Problem | null {
+  const { object, property } = mapping;
+  const trimmed = property.trim();
   if (!trimmed) return null;
 
   const match = properties.find((p) => p.object === object && p.name === trimmed);
-  if (match) return trimmed === name ? null : `« ${name} » contient un espace superflu`;
 
-  const onOther = properties.find((p) => p.name === trimmed);
-  if (onOther) {
-    return `« ${trimmed} » existe sur l'objet ${onOther.object}, pas sur ${object}`;
+  if (!match) {
+    const elsewhere = properties.find((p) => p.name === trimmed);
+    return elsewhere
+      ? { code: "wrong-object", property: trimmed, object, actualObject: elsewhere.object }
+      : { code: "unknown", property: trimmed, object };
   }
-  return `« ${trimmed} » n'existe pas dans ce portail HubSpot`;
+
+  // A trailing space reaches HubSpot verbatim and is rejected like any unknown
+  // property — invisible in a text field, so worth naming explicitly.
+  if (trimmed !== property) return { code: "whitespace", property, object };
+
+  // An enumeration refuses a value outside its list just as hard as it refuses
+  // an unknown property, so a select whose options drifted is the same failure.
+  if (match.type === "enumeration" && match.options.length && mapping.values?.length) {
+    const stray = mapping.values.filter((v) => v && !match.options.includes(v));
+    if (stray.length) {
+      return { code: "bad-option", property: trimmed, object, values: stray };
+    }
+  }
+
+  return null;
+}
+
+/** English rendering of a problem — the package's language. */
+export function describeProblem(problem: Problem): string {
+  switch (problem.code) {
+    case "unknown":
+      return `"${problem.property}" does not exist on ${problem.object} in this HubSpot portal`;
+    case "wrong-object":
+      return `"${problem.property}" exists on ${problem.actualObject}, not on ${problem.object}`;
+    case "whitespace":
+      return `"${problem.property}" has surrounding whitespace`;
+    case "bad-option":
+      return `"${problem.property}" does not accept ${problem.values
+        .map((v) => `"${v}"`)
+        .join(", ")}`;
+  }
 }
 
 /** Resolve the configured object list, accepting names or full definitions. */

@@ -1,6 +1,12 @@
 import type { Core } from "@strapi/strapi";
 import { errors } from "@strapi/utils";
-import { checkProperty, loadSchema, resolveObjects } from "./properties";
+import {
+  checkMapping,
+  describeProblem,
+  loadSchema,
+  resolveObjects,
+  type Mapping,
+} from "./properties";
 import { publicSettings, resolveApiKey, setStoredSettings } from "./settings";
 
 /**
@@ -23,6 +29,12 @@ interface ValidateTarget {
   uid: string;
   objectField: string;
   propertyField: string;
+  /**
+   * Repeatable holding the values a field can submit (default `options`), each
+   * `{ value?, label? }`. Checked against enumeration properties: a select whose
+   * choices drifted from HubSpot fails exactly like an unknown property.
+   */
+  optionsField?: string;
 }
 
 const config = {
@@ -60,7 +72,7 @@ const controllers = {
         ctx.body = { configured: true, ...schema };
       } catch (err) {
         strapi.log.error(`[hubspot] ${(err as Error).message}`);
-        ctx.throw(502, "Impossible de joindre HubSpot — vérifiez la clé API.");
+        ctx.throw(502, "Cannot reach HubSpot — check the API key.");
       }
     },
   }),
@@ -104,8 +116,8 @@ const routes = {
 function collectMappings(
   node: unknown,
   target: ValidateTarget,
-  found: { object: string; property: string }[] = [],
-): { object: string; property: string }[] {
+  found: Mapping[] = [],
+): Mapping[] {
   if (Array.isArray(node)) {
     for (const item of node) collectMappings(item, target, found);
     return found;
@@ -116,9 +128,20 @@ function collectMappings(
   const property = obj[target.propertyField];
   if (typeof property === "string" && property.trim()) {
     const object = obj[target.objectField];
+    const rawOptions = obj[target.optionsField || "options"];
+    const values = Array.isArray(rawOptions)
+      ? rawOptions
+          .map((o) => {
+            const opt = (o ?? {}) as { value?: unknown; label?: unknown };
+            const v = typeof opt.value === "string" && opt.value.trim() ? opt.value : opt.label;
+            return typeof v === "string" ? v.trim() : "";
+          })
+          .filter(Boolean)
+      : undefined;
     found.push({
       object: typeof object === "string" && object ? object : "contact",
       property,
+      values,
     });
   }
   for (const value of Object.values(obj)) collectMappings(value, target, found);
@@ -164,19 +187,23 @@ export default {
           );
         } catch {
           // HubSpot unreachable: saving content must not depend on their uptime.
-          strapi.log.warn("[hubspot] schéma indisponible — validation ignorée");
+          strapi.log.warn("[hubspot] schema unavailable — validation skipped");
           return next();
         }
 
         const problems = mappings
-          .map((m) => checkProperty(schema.properties, m.object, m.property))
-          .filter((reason): reason is string => Boolean(reason));
+          .map((m) => checkMapping(schema.properties, m))
+          .filter((p): p is NonNullable<typeof p> => Boolean(p));
 
         if (problems.length) {
           // A ValidationError surfaces as a readable message in the Content
-          // Manager; a plain Error would show an opaque 500 instead.
+          // Manager; a plain Error would show an opaque 500 instead. The
+          // structured problems ride along in `details` so a host app can
+          // localize them without parsing the sentence.
+          const sentences = [...new Set(problems.map(describeProblem))];
           throw new errors.ValidationError(
-            `Mapping HubSpot invalide — ${[...new Set(problems)].join(" ; ")}`,
+            `Invalid HubSpot mapping — ${sentences.join("; ")}`,
+            { problems },
           );
         }
         return next();

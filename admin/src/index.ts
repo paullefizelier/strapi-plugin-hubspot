@@ -35,7 +35,38 @@ export default {
       components: {
         Input: async () => import("./components/HubspotPropertyInput"),
       },
-      options: {},
+      // Exposed in the Content-Type Builder. Without this, `objectField` could
+      // only be set by hand-editing schema.json — which is not how anyone
+      // installing from npm adds a field, so the filtering would be unreachable.
+      options: {
+        base: [
+          {
+            sectionTitle: {
+              id: `${PLUGIN_ID}.options.section`,
+              defaultMessage: "HubSpot",
+            },
+            items: [
+              {
+                name: "options.objectField",
+                type: "text",
+                intlLabel: {
+                  id: `${PLUGIN_ID}.options.objectField.label`,
+                  defaultMessage: "Object field",
+                },
+                description: {
+                  id: `${PLUGIN_ID}.options.objectField.description`,
+                  defaultMessage:
+                    "Name of the sibling field holding the HubSpot object (e.g. hsObject). Leave empty to list every object's properties.",
+                },
+                placeholder: {
+                  id: `${PLUGIN_ID}.options.objectField.placeholder`,
+                  defaultMessage: "hsObject",
+                },
+              },
+            ],
+          },
+        ],
+      },
     });
 
     app.createSettingSection(
