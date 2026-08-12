@@ -1,16 +1,9 @@
 import * as React from "react";
 import { useIntl } from "react-intl";
 import { Field, Flex, Loader, SingleSelect, SingleSelectOption } from "@strapi/design-system";
-import { useFetchClient } from "@strapi/strapi/admin";
-import { PLUGIN_ID } from "../pluginId";
 import { getTranslation } from "../getTranslation";
 import { objectLabel } from "../objectLabels";
-
-interface SchemaResponse {
-  configured: boolean;
-  objects: string[];
-  unavailable: { object: string; reason: string }[];
-}
+import { useHubspotSchema } from "../useHubspotSchema";
 
 interface InputProps {
   name: string;
@@ -36,23 +29,9 @@ const HubspotObjectInput = React.forwardRef<HTMLDivElement, InputProps>(
   ({ name, value, onChange, disabled, error, required, label, hint, labelAction }, ref) => {
     const intl = useIntl();
     const { formatMessage } = intl;
-    const { get } = useFetchClient();
-    const [schema, setSchema] = React.useState<SchemaResponse | null>(null);
-
-    React.useEffect(() => {
-      let cancelled = false;
-      get<SchemaResponse>(`/${PLUGIN_ID}/properties`)
-        .then(({ data }) => {
-          if (!cancelled) setSchema(data);
-        })
-        .catch(() => {
-          if (!cancelled) setSchema({ configured: false, objects: [], unavailable: [] });
-        });
-      return () => {
-        cancelled = true;
-      };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [get]);
+    // Shared with every other picker on the page — one request per form, and a
+    // ↻ refresh from any property field updates this list too.
+    const { schema } = useHubspotSchema();
 
     const emit = (next?: string | number) =>
       onChange({ target: { name, value: String(next ?? ""), type: "string" } });

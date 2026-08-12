@@ -73,6 +73,12 @@ accept — are filtered out, so the list only ever offers things that will
 actually work. When the portal id is readable, each selected property gets a
 **Voir dans HubSpot** link straight to its settings page.
 
+The schema is fetched **once per page** whatever the number of fields, and
+cached ten minutes server-side. A property created in HubSpot a minute ago is
+one click away: the **↻ button** under any picker re-fetches the portal and
+updates every picker on the page at once. And switching a field's object clears
+a property that doesn't exist on the new one — it could only fail at save time.
+
 ### An object picker to feed it
 
 The sibling object field doesn't have to be a hand-typed enum: the
