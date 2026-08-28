@@ -84,7 +84,6 @@ interface DocumentContext {
 export function makeValidationMiddleware(strapi: Core.Strapi, target: ValidateTarget) {
   // `any` mirrors Strapi's Middleware result — the middleware only ever passes
   // `next()`'s value through, whatever the action returned.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return async (context: DocumentContext, next: () => any): Promise<any> => {
     const isWrite = ["create", "update"].includes(context.action);
     if (!isWrite || context.uid !== target.uid) return next();

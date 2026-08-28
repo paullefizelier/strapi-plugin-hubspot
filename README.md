@@ -1,9 +1,115 @@
 # Strapi HubSpot
 
-**Stop typing HubSpot property names from memory.** This plugin turns any CRM
-property field in your content types into a searchable picker fed by your actual
-portal, and refuses a bad mapping at save time instead of letting it fail
-silently three weeks later.
+**The form builder for HubSpot** — and the safety net under it.
+
+Build multi-step lead forms in a dedicated admin page: fields mapped to your
+portal's *real* CRM properties through a searchable picker, conditional fields
+and steps (AND/OR rules re-evaluated server-side), a public API your frontend
+renders and posts to, and a submission pipeline that upserts the Contact,
+finds-or-creates the Company by corporate domain, drops a recap note on the
+timeline, and stores every submission in Strapi whatever the CRM's mood.
+
+Under it, the safety net this plugin has always been: property pickers as
+custom fields for your own content types, save-time mapping validation, a
+portal-wide audit, and a sending service with retries and a replay queue.
+
+## The form builder
+
+**HubSpot Forms**, in the admin menu (RBAC-gated), is a builder page — not a
+Content Manager view. Steps and fields are cards you reorder and configure;
+the right-hand panel holds the selected field's settings, including its CRM
+mapping picked from the portal (object select, property search, one-click
+import of an enumeration's options, deep link to the property).
+
+### Conditional fields and steps
+
+Any field or step can declare `visibleIf`: rules like *[field] [is] [value]*
+combined with AND/OR. The editor only offers fields placed **earlier** in the
+form, so evaluation is a single deterministic pass. Operators: `eq`, `neq`,
+`contains`, `empty`, `notEmpty`, `gt`, `lt`.
+
+Conditions are enforced **server-side at submission**, not just in the UI: a
+hidden field loses its `required`, and its value is discarded even if the
+browser sent it — the payload that reaches HubSpot is the payload the visitor
+actually saw.
+
+### The public API
+
+Two content-api routes (grant them to the Public role in **Settings → Users &
+Permissions**):
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/hubspot/forms/:slug?locale=` | The published form — meta, steps, fields, conditions. The CRM mapping is stripped: the browser never learns your property names |
+| `POST` | `/api/hubspot/forms/:slug/submit` | Validates (bounds, conditions, required), maps server-side, syncs HubSpot, stores the submission |
+
+The submit pipeline, in order: contact upsert (`email` is the find-or-create
+key) through the plugin's sending service — pre-validation against the portal
+schema (a stale mapping costs one answer, never the lead), retries, replay
+queue; then, when the email is on a corporate domain, company found-or-created
+by `domain` and associated to the contact; then a timeline note recapping the
+answers and the lead's origin. Company and note are best-effort and can be
+turned off:
+
+```ts
+hubspot: {
+  config: {
+    forms: {
+      companyFromDomain: true, // Company by corporate domain + association
+      timelineNote: true,      // recap note on the contact (and company)
+    },
+  },
+}
+```
+
+Every submission is stored in **HubSpot form submissions** (Content Manager),
+synced or not, with the CRM ids when the sync succeeded — the source of truth
+lives in your database, not in HubSpot's availability.
+
+Typed payloads for your frontend:
+
+```ts
+import type { PublicForm, SubmitRequest } from "strapi-plugin-hubspot/types";
+```
+
+### Importing existing forms
+
+If your forms currently live in a content type (the `steps`/`fields` +
+`hsObject`/`hsProperty` shape this README documents below), point the builder
+at it:
+
+```ts
+hubspot: {
+  config: {
+    forms: {
+      import: {
+        uid: "api::form.form",
+        // Optional remapping when your attribute names differ:
+        // steps: "etapes", fields: "champs",
+        // field: { label: "libelle", object: "objet", property: "propriete" },
+      },
+    },
+  },
+}
+```
+
+The list page then offers **Import an existing form**: one click converts the
+entry — every locale — into a builder draft with the same slug. The source is
+never modified, re-importing overwrites the draft only, and unpublishing rolls
+a migrated form back. Migrate form by form; the validation middleware keeps
+protecting the ones that stay.
+
+### i18n and publishing
+
+Forms are draft & publish, localized like your content: `name` and `slug` are
+shared, everything else — including the structure — is per-locale. Opening a
+locale that doesn't exist yet starts it from the default locale's structure.
+Publishing is blocked while a mapping problem remains; drafts save anyway,
+with the problem flagged on the field carrying it.
+
+---
+
+## The safety net
 
 ## The problem it solves
 
