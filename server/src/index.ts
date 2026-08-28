@@ -1,10 +1,19 @@
 import type { Core } from "@strapi/strapi";
 import { runAudit } from "./audit";
 import contentTypes from "./content-types";
+import {
+  createFormsService,
+  publicForm,
+  sanitizeRawValues,
+  type FormEntry,
+  type SubmitMeta,
+} from "./forms";
 import { loadSchema, resolveObjects } from "./properties";
 import { publicSettings, resolveApiKey, setStoredSettings } from "./settings";
 import { createSubmitService, FAILURE_UID } from "./submit";
 import { makeValidationMiddleware, type ValidateTarget } from "./validation";
+
+const FORM_UID = "plugin::hubspot.form";
 
 /**
  * Plugin configuration (config/plugins.ts of the host app):
@@ -32,6 +41,11 @@ const config = {
     // `{ name, path }` for a custom object type.
     objects: ["contact", "company"] as unknown[],
     validate: [] as ValidateTarget[],
+    // Submission pipeline of the built forms. Both default to true:
+    //  - companyFromDomain: a corporate email upserts the Company (deduped by
+    //    domain) and associates it to the contact;
+    //  - timelineNote: a note recaps the submission on the contact's timeline.
+    forms: { companyFromDomain: true, timelineNote: true },
   },
   validator(cfg: { validate?: unknown }) {
     if (cfg.validate && !Array.isArray(cfg.validate)) {
@@ -102,6 +116,58 @@ const controllers = {
     },
   }),
 
+  forms: ({ strapi }: { strapi: Core.Strapi }) => ({
+    /** Published form for the host frontend — CRM mapping stripped. */
+    async findOne(ctx: {
+      params: { slug: string };
+      query: { locale?: string };
+      body: unknown;
+      throw: (s: number, m: string) => never;
+    }) {
+      const entry = (await strapi.documents(FORM_UID as never).findFirst({
+        filters: { slug: ctx.params.slug },
+        status: "published",
+        locale: ctx.query.locale,
+      } as never)) as unknown as FormEntry | null;
+      if (!entry?.definition) ctx.throw(404, "Form not found");
+      ctx.body = publicForm(entry);
+    },
+
+    async submit(ctx: {
+      params: { slug: string };
+      query: { locale?: string };
+      request: { body?: { values?: unknown; meta?: Record<string, unknown> } };
+      body: unknown;
+      throw: (s: number, m: string) => never;
+    }) {
+      const entry = (await strapi.documents(FORM_UID as never).findFirst({
+        filters: { slug: ctx.params.slug },
+        status: "published",
+        locale: ctx.query.locale,
+      } as never)) as unknown as FormEntry | null;
+      if (!entry?.definition) ctx.throw(404, "Form not found");
+
+      const values = sanitizeRawValues(ctx.request.body?.values);
+      if (!values || !Object.keys(values).length) ctx.throw(422, "Invalid submission");
+
+      // Meta is display-only (stored + timeline note): strings, clipped.
+      const rawMeta = ctx.request.body?.meta ?? {};
+      const meta: SubmitMeta = {};
+      for (const key of ["pagePath", "pageUrl", "originPath", "originLabel", "source"]) {
+        const v = rawMeta[key];
+        if (typeof v === "string" && v) meta[key] = v.slice(0, 500);
+      }
+
+      const outcome = await strapi.plugin("hubspot").service("forms").submit(entry, values, meta);
+      if (!outcome.ok) {
+        (ctx as unknown as { status: number }).status = 422;
+        ctx.body = { ok: false, missingRequired: outcome.missingRequired ?? [] };
+        return;
+      }
+      ctx.body = { ok: true, hubspotSynced: outcome.hubspotSynced };
+    },
+  }),
+
   settings: ({ strapi }: { strapi: Core.Strapi }) => ({
     async get(ctx: { body: unknown }) {
       ctx.body = await publicSettings(strapi);
@@ -145,6 +211,16 @@ const routes = {
       adminRoute("DELETE", "/settings", "settings.reset", [SETTINGS_ACTION]),
     ],
   },
+  // Public form delivery + submission, under /api/hubspot/…. Like any
+  // content-api route, they must be granted to the Public role in
+  // Settings → Users & Permissions before the frontend can call them.
+  "content-api": {
+    type: "content-api",
+    routes: [
+      { method: "GET", path: "/forms/:slug", handler: "forms.findOne", config: { policies: [] } },
+      { method: "POST", path: "/forms/:slug/submit", handler: "forms.submit", config: { policies: [] } },
+    ],
+  },
 };
 
 export default {
@@ -155,6 +231,7 @@ export default {
 
   services: {
     submit: ({ strapi }: { strapi: Core.Strapi }) => createSubmitService(strapi),
+    forms: ({ strapi }: { strapi: Core.Strapi }) => createFormsService(strapi),
   },
 
   register({ strapi }: { strapi: Core.Strapi }) {
