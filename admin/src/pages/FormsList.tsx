@@ -8,6 +8,8 @@ import {
   Flex,
   IconButton,
   Loader,
+  SingleSelect,
+  SingleSelectOption,
   Table,
   Tbody,
   Td,
@@ -36,6 +38,8 @@ const FormsList = () => {
   const [name, setName] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [sources, setSources] = React.useState<{ documentId: string; name: string; slug: string }[]>([]);
+  const [sourceId, setSourceId] = React.useState("");
 
   const t = (id: string, defaultMessage: string, values?: Record<string, string | number>) =>
     formatMessage({ id: getTranslation(id), defaultMessage }, values);
@@ -47,8 +51,28 @@ const FormsList = () => {
 
   React.useEffect(() => {
     load().catch(() => setError(t("forms.load-error", "Could not load the forms.")));
+    get<{ sources: { documentId: string; name: string; slug: string }[] }>(
+      `/${PLUGIN_ID}/builder/import/sources`,
+    )
+      .then(({ data }) => setSources(data.sources ?? []))
+      .catch(() => setSources([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
+
+  const runImport = async () => {
+    if (!sourceId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { data } = await post<{ documentId: string }>(`/${PLUGIN_ID}/builder/import`, {
+        documentId: sourceId,
+      });
+      navigate(data.documentId);
+    } catch {
+      setError(t("forms.import-error", "Could not import the form."));
+      setBusy(false);
+    }
+  };
 
   const create = async () => {
     if (!name.trim()) return;
@@ -113,6 +137,41 @@ const FormsList = () => {
       {error && (
         <Box paddingBottom={4}>
           <Typography textColor="danger600">{error}</Typography>
+        </Box>
+      )}
+
+      {sources.length > 0 && (
+        <Box background="neutral0" hasRadius shadow="tableShadow" padding={4} marginBottom={4}>
+          <Flex gap={2} alignItems="flex-end" justifyContent="space-between">
+            <Box>
+              <Typography variant="delta" tag="h2">
+                {t("forms.import-title", "Import an existing form")}
+              </Typography>
+              <Typography variant="pi" textColor="neutral600" tag="p">
+                {t(
+                  "forms.import-hint",
+                  "Converts a legacy content-type form (all locales) into a draft here — same slug, source untouched. Re-importing overwrites the draft.",
+                )}
+              </Typography>
+            </Box>
+            <Flex gap={2}>
+              <SingleSelect
+                aria-label={t("forms.import-source", "Form to import")}
+                placeholder={t("forms.import-source", "Form to import")}
+                value={sourceId}
+                onChange={(v: string | number) => setSourceId(String(v))}
+              >
+                {sources.map((s) => (
+                  <SingleSelectOption key={s.documentId} value={s.documentId}>
+                    {s.name} {s.slug ? `(${s.slug})` : ""}
+                  </SingleSelectOption>
+                ))}
+              </SingleSelect>
+              <Button variant="secondary" onClick={runImport} disabled={busy || !sourceId}>
+                {t("forms.import", "Import")}
+              </Button>
+            </Flex>
+          </Flex>
         </Box>
       )}
 

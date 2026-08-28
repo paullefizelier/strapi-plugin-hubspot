@@ -9,6 +9,7 @@
 import type { Core } from "@strapi/strapi";
 import { validateDefinition, type FormDefinition } from "./conditions";
 import { mappingProblems, type FormEntry } from "./forms";
+import { convertLegacyForm, type ImportMap } from "./importLegacy";
 import { loadSchema, resolveObjects, type Problem } from "./properties";
 import { resolveApiKey } from "./settings";
 
@@ -210,6 +211,106 @@ export function createFormsAdminController(strapi: Core.Strapi) {
         locale: ctx.query.locale,
       } as never);
       ctx.body = { ok: true };
+    },
+
+    /** Entries of the configured legacy content type, offered for import. */
+    async listSources(ctx: Ctx) {
+      const config = (strapi.plugin("hubspot").config("forms", {}) as {
+        import?: { uid?: string } & ImportMap;
+      }).import;
+      if (!config?.uid) {
+        ctx.body = { configured: false, sources: [] };
+        return;
+      }
+      try {
+        const entries = (await strapi.documents(config.uid as never).findMany({
+          fields: ["name", "slug"],
+          sort: "name:asc",
+        } as never)) as unknown as { documentId: string; name?: string; slug?: string }[];
+        ctx.body = {
+          configured: true,
+          sources: entries.map((e) => ({
+            documentId: e.documentId,
+            name: e.name ?? e.slug ?? e.documentId,
+            slug: e.slug ?? "",
+          })),
+        };
+      } catch (err) {
+        strapi.log.warn(`[hubspot] import sources unavailable — ${(err as Error).message}`);
+        ctx.body = { configured: true, sources: [] };
+      }
+    },
+
+    /**
+     * Converts one legacy entry (every locale of it) into a plugin form
+     * draft. Same slug: re-importing overwrites the draft, never touches the
+     * published version, and never modifies the source.
+     */
+    async runImport(ctx: Ctx) {
+      const config = (strapi.plugin("hubspot").config("forms", {}) as {
+        import?: { uid?: string } & ImportMap;
+      }).import;
+      if (!config?.uid) ctx.throw(400, "No import source configured (forms.import.uid)");
+      const sourceId = ctx.request.body?.documentId;
+      if (typeof sourceId !== "string" || !sourceId) ctx.throw(400, "documentId is required");
+
+      const { uid, ...map } = config!;
+      const populate = {
+        [map.steps ?? "steps"]: {
+          populate: {
+            [map.fields ?? "fields"]: { populate: [map.field?.options ?? "options"] },
+          },
+        },
+      };
+
+      let locales: (string | undefined)[] = [undefined];
+      try {
+        const found = (await strapi
+          .plugin("i18n")
+          .service("locales")
+          .find()) as { code: string; isDefault?: boolean }[];
+        if (Array.isArray(found) && found.length) {
+          // Default locale first: it creates the document, the others localize it.
+          locales = [...found].sort((a, b) => Number(b.isDefault ?? false) - Number(a.isDefault ?? false)).map((l) => l.code);
+        }
+      } catch {
+        /* i18n unavailable — single pass */
+      }
+
+      let targetId: string | null = null;
+      let imported = 0;
+      for (const locale of locales) {
+        const source = (await strapi.documents(uid as never).findOne({
+          documentId: sourceId,
+          locale,
+          populate,
+        } as never)) as unknown as Record<string, unknown> | null;
+        if (!source) continue;
+
+        const converted = convertLegacyForm(source, map);
+        if (!targetId) {
+          const existing = (await documents().findFirst({
+            filters: { slug: converted.slug },
+          } as never)) as unknown as { documentId: string } | null;
+          targetId = existing?.documentId ?? null;
+        }
+        const data = { ...converted } as Record<string, unknown>;
+        if (targetId) {
+          // The slug is shared across locales; only the meta + definition move.
+          delete data.slug;
+          await documents().update({ documentId: targetId, locale, data: data as never } as never);
+        } else {
+          const created = (await documents().create({
+            locale,
+            data: data as never,
+          } as never)) as unknown as { documentId: string };
+          targetId = created.documentId;
+        }
+        imported += 1;
+      }
+
+      if (!targetId) ctx.throw(404, "Source entry not found");
+      ctx.body = { documentId: targetId, locales: imported };
     },
 
     async remove(ctx: Ctx) {

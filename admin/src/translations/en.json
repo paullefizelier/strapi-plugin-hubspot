@@ -185,5 +185,10 @@
   "condition.op.empty": "is empty",
   "condition.op.notEmpty": "is filled",
   "condition.op.gt": "is greater than",
-  "condition.op.lt": "is less than"
+  "condition.op.lt": "is less than",
+  "forms.import-title": "Import an existing form",
+  "forms.import-hint": "Converts a legacy content-type form (all locales) into a draft here — same slug, source untouched. Re-importing overwrites the draft.",
+  "forms.import-source": "Form to import",
+  "forms.import": "Import",
+  "forms.import-error": "Could not import the form."
 }

@@ -185,5 +185,10 @@
   "condition.op.empty": "est vide",
   "condition.op.notEmpty": "est rempli",
   "condition.op.gt": "est supérieur à",
-  "condition.op.lt": "est inférieur à"
+  "condition.op.lt": "est inférieur à",
+  "forms.import-title": "Importer un formulaire existant",
+  "forms.import-hint": "Convertit un formulaire du content type historique (toutes locales) en brouillon ici — même slug, source intacte. Ré-importer écrase le brouillon.",
+  "forms.import-source": "Formulaire à importer",
+  "forms.import": "Importer",
+  "forms.import-error": "Impossible d'importer le formulaire."
 }

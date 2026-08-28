@@ -219,6 +219,8 @@ const routes = {
       adminRoute("POST", "/builder/forms/:documentId/publish", "formsAdmin.publish", [FORMS_ACTION]),
       adminRoute("POST", "/builder/forms/:documentId/unpublish", "formsAdmin.unpublish", [FORMS_ACTION]),
       adminRoute("DELETE", "/builder/forms/:documentId", "formsAdmin.remove", [FORMS_ACTION]),
+      adminRoute("GET", "/builder/import/sources", "formsAdmin.listSources", [FORMS_ACTION]),
+      adminRoute("POST", "/builder/import", "formsAdmin.runImport", [FORMS_ACTION]),
     ],
   },
   // Public form delivery + submission, under /api/hubspot/…. Like any
