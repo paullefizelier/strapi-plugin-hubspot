@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   evaluateCondition,
+  validateDefinition,
   resolveSubmission,
   type Condition,
   type FormDefinition,
@@ -214,5 +215,97 @@ describe("resolveSubmission", () => {
     const out = resolveSubmission(def, { email: { nested: "object" } as never });
     expect(out.values).toEqual({});
     expect(out.unknown).toEqual([]);
+  });
+});
+
+describe("validateDefinition", () => {
+  const base = (fields: FormFieldDef[]): FormDefinition =>
+    ({ version: 1, steps: [{ id: "stp_1", fields }] });
+
+  it("accepts a well-formed definition", () => {
+    const def = oneStep([
+      field("fld_a", "type"),
+      field("fld_b", "company", {
+        visibleIf: cond("and", { field: "fld_a", operator: "eq", value: "entreprise" }),
+      }),
+    ]);
+    expect(validateDefinition(def)).toEqual([]);
+  });
+
+  it("flags a duplicate field name", () => {
+    const errors = validateDefinition(base([field("fld_a", "email"), field("fld_b", "email")]));
+    expect(errors).toEqual([{ code: "duplicate-name", fieldId: "fld_b", name: "email" }]);
+  });
+
+  it("flags a rule pointing at an unknown field", () => {
+    const errors = validateDefinition(
+      base([
+        field("fld_a", "a", {
+          visibleIf: cond("and", { field: "fld_gone", operator: "notEmpty" }),
+        }),
+      ]),
+    );
+    expect(errors).toEqual([{ code: "unknown-field", fieldId: "fld_a", target: "fld_gone" }]);
+  });
+
+  it("flags a rule pointing at a later field — conditions only look back", () => {
+    const errors = validateDefinition(
+      base([
+        field("fld_a", "a", {
+          visibleIf: cond("and", { field: "fld_b", operator: "notEmpty" }),
+        }),
+        field("fld_b", "b"),
+      ]),
+    );
+    expect(errors).toEqual([{ code: "forward-reference", fieldId: "fld_a", target: "fld_b" }]);
+  });
+
+  it("flags a self-reference", () => {
+    const errors = validateDefinition(
+      base([field("fld_a", "a", { visibleIf: cond("and", { field: "fld_a", operator: "notEmpty" }) })]),
+    );
+    expect(errors).toEqual([{ code: "forward-reference", fieldId: "fld_a", target: "fld_a" }]);
+  });
+
+  it("flags a comparison rule with no value to compare against", () => {
+    const errors = validateDefinition(
+      base([
+        field("fld_a", "a"),
+        field("fld_b", "b", { visibleIf: cond("and", { field: "fld_a", operator: "eq" }) }),
+      ]),
+    );
+    expect(errors).toEqual([{ code: "missing-value", fieldId: "fld_b", target: "fld_a" }]);
+  });
+
+  it("empty/notEmpty need no value", () => {
+    const errors = validateDefinition(
+      base([
+        field("fld_a", "a"),
+        field("fld_b", "b", { visibleIf: cond("and", { field: "fld_a", operator: "empty" }) }),
+      ]),
+    );
+    expect(errors).toEqual([]);
+  });
+
+  it("flags a field with no name", () => {
+    const errors = validateDefinition(base([field("fld_a", "")]));
+    expect(errors).toEqual([{ code: "missing-name", fieldId: "fld_a", name: "" }]);
+  });
+
+  it("checks step conditions against fields of earlier steps only", () => {
+    const def: FormDefinition = {
+      version: 1,
+      steps: [
+        { id: "stp_1", fields: [field("fld_a", "a")] },
+        {
+          id: "stp_2",
+          visibleIf: cond("and", { field: "fld_b", operator: "notEmpty" }),
+          fields: [field("fld_b", "b")],
+        },
+      ],
+    };
+    expect(validateDefinition(def)).toEqual([
+      { code: "forward-reference", stepId: "stp_2", target: "fld_b" },
+    ]);
   });
 });

@@ -52,6 +52,64 @@ export interface SubmissionResolution {
   unknown: string[];
 }
 
+export type DefinitionError =
+  | { code: "duplicate-name"; fieldId: string; name: string }
+  | { code: "missing-name"; fieldId: string; name: string }
+  | { code: "unknown-field"; fieldId?: string; stepId?: string; target: string }
+  | { code: "forward-reference"; fieldId?: string; stepId?: string; target: string }
+  | { code: "missing-value"; fieldId?: string; stepId?: string; target: string };
+
+/** Operators that compare against a value — the others just probe presence. */
+const NEEDS_VALUE: ReadonlySet<Operator> = new Set(["eq", "neq", "contains", "gt", "lt"]);
+
+/**
+ * Structural check of a definition — what the builder enforces, re-checked
+ * server-side so a hand-crafted PUT can't save a form the engine can't run:
+ * unique non-empty names, and conditions that only look back.
+ */
+export function validateDefinition(definition: FormDefinition): DefinitionError[] {
+  const errors: DefinitionError[] = [];
+  const allIds = new Set<string>();
+  for (const step of definition.steps ?? []) {
+    for (const fld of step.fields ?? []) allIds.add(fld.id);
+  }
+
+  const checkCondition = (
+    condition: Condition | null | undefined,
+    seen: Set<string>,
+    owner: { fieldId?: string; stepId?: string },
+  ) => {
+    for (const rule of condition?.rules ?? []) {
+      if (!allIds.has(rule.field)) {
+        errors.push({ code: "unknown-field", ...owner, target: rule.field });
+      } else if (!seen.has(rule.field)) {
+        errors.push({ code: "forward-reference", ...owner, target: rule.field });
+      }
+      if (NEEDS_VALUE.has(rule.operator) && (rule.value === undefined || rule.value === "")) {
+        errors.push({ code: "missing-value", ...owner, target: rule.field });
+      }
+    }
+  };
+
+  const seen = new Set<string>();
+  const seenNames = new Set<string>();
+  for (const step of definition.steps ?? []) {
+    checkCondition(step.visibleIf, seen, { stepId: step.id });
+    for (const fld of step.fields ?? []) {
+      if (!fld.name?.trim()) {
+        errors.push({ code: "missing-name", fieldId: fld.id, name: fld.name ?? "" });
+      } else if (seenNames.has(fld.name)) {
+        errors.push({ code: "duplicate-name", fieldId: fld.id, name: fld.name });
+      } else {
+        seenNames.add(fld.name);
+      }
+      checkCondition(fld.visibleIf, seen, { fieldId: fld.id });
+      seen.add(fld.id);
+    }
+  }
+  return errors;
+}
+
 const isPrimitive = (v: unknown): v is Primitive =>
   typeof v === "string" || typeof v === "number" || typeof v === "boolean";
 

@@ -86,6 +86,32 @@ export function groupByObject(
   return groups;
 }
 
+/**
+ * Every CRM mapping of a definition, checked against the portal schema — the
+ * builder's save-time equivalent of the content-type validation middleware.
+ * A select's own options are checked against the enumeration too.
+ */
+export function mappingProblems(
+  definition: FormDefinition,
+  portalProperties: Parameters<typeof checkMapping>[0],
+): (Problem & { fieldId: string })[] {
+  const problems: (Problem & { fieldId: string })[] = [];
+  for (const step of definition.steps ?? []) {
+    for (const fld of step.fields ?? []) {
+      const mapping = (fld.hubspot ?? {}) as HubspotMapping;
+      if (!mapping.property) continue;
+      const options = fld.options as { value?: string }[] | undefined;
+      const problem = checkMapping(portalProperties, {
+        object: mapping.object?.trim() || "contact",
+        property: mapping.property,
+        values: options?.map((o) => o.value ?? "").filter(Boolean),
+      });
+      if (problem) problems.push({ ...problem, fieldId: fld.id });
+    }
+  }
+  return problems;
+}
+
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 /** First value that looks like an email — the field named `email` wins. */

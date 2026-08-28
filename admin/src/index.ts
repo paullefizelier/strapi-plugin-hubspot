@@ -1,3 +1,4 @@
+import { PaperPlane } from "@strapi/icons";
 import { PLUGIN_ID } from "./pluginId";
 import { prefixPluginTranslations } from "./getTranslation";
 
@@ -15,12 +16,22 @@ import { prefixPluginTranslations } from "./getTranslation";
 export default {
   register(app: {
     customFields: { register: (field: unknown) => void };
+    addMenuLink: (link: unknown) => void;
     createSettingSection: (
       section: { id: string; intlLabel: { id: string; defaultMessage: string } },
       links: unknown[],
     ) => void;
     registerPlugin: (plugin: { id: string; name: string }) => void;
   }) {
+    // The form builder — gated by the same RBAC action as its routes.
+    app.addMenuLink({
+      to: `plugins/${PLUGIN_ID}`,
+      icon: PaperPlane,
+      intlLabel: { id: `${PLUGIN_ID}.menu.label`, defaultMessage: "HubSpot Forms" },
+      permissions: [{ action: `plugin::${PLUGIN_ID}.forms`, subject: null }],
+      Component: async () => (await import("./pages/Forms")).default,
+    });
+
     app.customFields.register({
       name: "property",
       pluginId: PLUGIN_ID,

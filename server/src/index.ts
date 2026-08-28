@@ -8,12 +8,11 @@ import {
   type FormEntry,
   type SubmitMeta,
 } from "./forms";
+import { createFormsAdminController, FORM_UID } from "./formsAdmin";
 import { loadSchema, resolveObjects } from "./properties";
 import { publicSettings, resolveApiKey, setStoredSettings } from "./settings";
 import { createSubmitService, FAILURE_UID } from "./submit";
 import { makeValidationMiddleware, type ValidateTarget } from "./validation";
-
-const FORM_UID = "plugin::hubspot.form";
 
 /**
  * Plugin configuration (config/plugins.ts of the host app):
@@ -33,6 +32,8 @@ const FORM_UID = "plugin::hubspot.form";
 
 /** RBAC action gating the settings screen and its routes. */
 const SETTINGS_ACTION = "plugin::hubspot.settings";
+/** RBAC action gating the form builder and its routes. */
+const FORMS_ACTION = "plugin::hubspot.forms";
 
 const config = {
   default: {
@@ -115,6 +116,8 @@ const controllers = {
       ctx.body = await strapi.plugin("hubspot").service("submit").retryFailures();
     },
   }),
+
+  formsAdmin: ({ strapi }: { strapi: Core.Strapi }) => createFormsAdminController(strapi),
 
   forms: ({ strapi }: { strapi: Core.Strapi }) => ({
     /** Published form for the host frontend — CRM mapping stripped. */
@@ -209,6 +212,13 @@ const routes = {
       adminRoute("GET", "/settings", "settings.get", [SETTINGS_ACTION]),
       adminRoute("PUT", "/settings", "settings.update", [SETTINGS_ACTION]),
       adminRoute("DELETE", "/settings", "settings.reset", [SETTINGS_ACTION]),
+      adminRoute("GET", "/builder/forms", "formsAdmin.list", [FORMS_ACTION]),
+      adminRoute("POST", "/builder/forms", "formsAdmin.create", [FORMS_ACTION]),
+      adminRoute("GET", "/builder/forms/:documentId", "formsAdmin.findOne", [FORMS_ACTION]),
+      adminRoute("PUT", "/builder/forms/:documentId", "formsAdmin.update", [FORMS_ACTION]),
+      adminRoute("POST", "/builder/forms/:documentId/publish", "formsAdmin.publish", [FORMS_ACTION]),
+      adminRoute("POST", "/builder/forms/:documentId/unpublish", "formsAdmin.unpublish", [FORMS_ACTION]),
+      adminRoute("DELETE", "/builder/forms/:documentId", "formsAdmin.remove", [FORMS_ACTION]),
     ],
   },
   // Public form delivery + submission, under /api/hubspot/…. Like any
@@ -255,6 +265,12 @@ export default {
         section: "plugins",
         displayName: "Access the HubSpot settings",
         uid: "settings",
+        pluginName: "hubspot",
+      },
+      {
+        section: "plugins",
+        displayName: "Use the HubSpot form builder",
+        uid: "forms",
         pluginName: "hubspot",
       },
     ]);

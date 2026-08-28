@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FormDefinition } from "../conditions";
-import { corporateDomain, findEmail, groupByObject, publicForm, sanitizeRawValues } from "../forms";
+import { corporateDomain, findEmail, groupByObject, mappingProblems, publicForm, sanitizeRawValues } from "../forms";
 
 const definition: FormDefinition = {
   version: 1,
@@ -165,4 +165,88 @@ describe("sanitizeRawValues", () => {
     const out = sanitizeRawValues({ comment: "x".repeat(6000) });
     expect((out?.comment as string).length).toBe(5000);
   });
+});
+
+describe("mappingProblems", () => {
+  const portal = [
+    { name: "email", label: "Email", object: "contact", type: "string" as const, options: [] },
+    {
+      name: "hs_role",
+      label: "Rôle",
+      object: "contact",
+      type: "enumeration" as const,
+      options: [{ value: "dev" }],
+    },
+  ];
+
+  it("returns nothing for a definition whose mappings all exist", () => {
+    expect(mappingProblems(definition0(), portal)).toEqual([]);
+  });
+
+  it("flags each bad mapping with the field id carrying it", () => {
+    const def: FormDefinition = {
+      version: 1,
+      steps: [
+        {
+          id: "s",
+          fields: [
+            {
+              id: "fld_bad",
+              name: "x",
+              label: "X",
+              type: "text",
+              hubspot: { object: "contact", property: "hs_rôle" },
+            },
+          ],
+        },
+      ],
+    };
+    const problems = mappingProblems(def, portal);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatchObject({ fieldId: "fld_bad", code: "unknown" });
+  });
+
+  it("checks a select's options against the portal enumeration", () => {
+    const def: FormDefinition = {
+      version: 1,
+      steps: [
+        {
+          id: "s",
+          fields: [
+            {
+              id: "fld_role",
+              name: "role",
+              label: "Rôle",
+              type: "select",
+              options: [{ value: "dev", label: "Dev" }, { value: "ghost", label: "Fantôme" }],
+              hubspot: { object: "contact", property: "hs_role" },
+            },
+          ],
+        },
+      ],
+    };
+    const problems = mappingProblems(def, portal);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatchObject({ fieldId: "fld_role", code: "bad-option" });
+  });
+
+  function definition0(): FormDefinition {
+    return {
+      version: 1,
+      steps: [
+        {
+          id: "s",
+          fields: [
+            {
+              id: "fld_email",
+              name: "email",
+              label: "Email",
+              type: "email",
+              hubspot: { object: "contact", property: "email" },
+            },
+          ],
+        },
+      ],
+    };
+  }
 });
