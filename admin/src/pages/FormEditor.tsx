@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useIntl } from "react-intl";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   Badge,
   Box,
@@ -23,7 +23,6 @@ import {
   fieldsBefore,
   makeId,
   type DefinitionError,
-  type FormDefinition,
   type FormEntryDto,
   type FormField,
   type FormStep,
@@ -60,7 +59,6 @@ const newStep = (): FormStep => ({ id: makeId("stp"), title: "", fields: [] });
 const FormEditor = () => {
   const { formatMessage } = useIntl();
   const { get, post, put } = useFetchClient();
-  const navigate = useNavigate();
   const { documentId } = useParams<{ documentId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const locale = searchParams.get("locale") ?? undefined;

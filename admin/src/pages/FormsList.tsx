@@ -91,7 +91,6 @@ const FormsList = () => {
   };
 
   const remove = async (row: FormListRow) => {
-    // eslint-disable-next-line no-alert
     if (!window.confirm(t("forms.delete-confirm", 'Delete "{name}" and all its locales?', { name: row.name }))) {
       return;
     }

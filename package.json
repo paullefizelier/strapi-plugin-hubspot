@@ -1,7 +1,7 @@
 {
   "name": "strapi-plugin-hubspot",
-  "version": "0.5.0",
-  "description": "HubSpot integration for Strapi — pick CRM properties from a searchable list filtered by object, and catch bad mappings before they reach the API.",
+  "version": "0.6.0",
+  "description": "The form builder for HubSpot in Strapi — multi-step forms with conditional fields mapped to real CRM properties, a public submit pipeline with retries, and save-time mapping validation.",
   "keywords": [
     "strapi",
     "plugin",
@@ -35,20 +35,29 @@
       "import": "./dist/server/index.mjs",
       "require": "./dist/server/index.js",
       "default": "./dist/server/index.js"
+    },
+    "./types": {
+      "types": "./dist/shared/types.d.ts",
+      "source": "./shared/types.ts",
+      "import": "./dist/shared/types.mjs",
+      "require": "./dist/shared/types.js",
+      "default": "./dist/shared/types.js"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "strapi-plugin build",
+    "build": "strapi-plugin build && node scripts/build-types.mjs",
     "watch": "strapi-plugin watch",
     "verify": "strapi-plugin verify",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "lint": "eslint admin/src server/src"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@strapi/design-system": "^2.0.0-rc.29",
     "@strapi/icons": "^2.0.0-rc.29",
     "@strapi/sdk-plugin": "^5.3.2",
@@ -57,11 +66,14 @@
     "@strapi/utils": "^5.0.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "eslint": "^10.9.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.0",
     "styled-components": "^6.1.11",
     "typescript": "^5.5.4",
+    "typescript-eslint": "^8.68.0",
     "vitest": "^3.2.4"
   },
   "peerDependencies": {
