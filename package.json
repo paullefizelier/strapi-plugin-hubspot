@@ -7,6 +7,10 @@
     "plugin",
     "hubspot",
     "crm",
+    "form-builder",
+    "forms",
+    "conditional-fields",
+    "leads",
     "custom-field"
   ],
   "license": "MIT",
@@ -45,7 +49,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "strapi-plugin build && node scripts/build-types.mjs",
