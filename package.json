@@ -99,5 +99,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "strapi-plugin-hubspot": "^0.6.1"
   }
 }
