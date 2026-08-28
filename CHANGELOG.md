@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.1 — 2026-08-28
+
+### Fixed
+- **Admin crash on the HubSpot Forms page** ("Error" with no message, from a
+  react-router invariant): `react-router-dom` was missing from
+  `peerDependencies`, so 0.6.0 shipped its own inlined copy — a second Router
+  context the plugin's `<Routes>` could not reach. It is now externalized to
+  the host admin's copy, like every other shared library.
+- A `check-externals` step now runs on every build and fails when a
+  must-be-external library gets inlined, so this class of bug can't ship again.
+
 ## 0.6.0 — 2026-08-28
 
 The plugin becomes **the form builder for HubSpot**.

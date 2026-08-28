@@ -1,6 +1,6 @@
 {
   "name": "strapi-plugin-hubspot",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "The form builder for HubSpot in Strapi — multi-step forms with conditional fields mapped to real CRM properties, a public submit pipeline with retries, and save-time mapping validation.",
   "keywords": [
     "strapi",
@@ -53,7 +53,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "strapi-plugin build && node scripts/build-types.mjs",
+    "build": "strapi-plugin build && node scripts/build-types.mjs && node scripts/check-externals.mjs",
     "watch": "strapi-plugin watch",
     "verify": "strapi-plugin verify",
     "test": "vitest run",
@@ -88,6 +88,7 @@
     "@strapi/utils": "^5.0.0",
     "react": "^17.0.0 || ^18.0.0",
     "react-dom": "^17.0.0 || ^18.0.0",
+    "react-router-dom": "^6.0.0",
     "styled-components": "^6.0.0"
   },
   "strapi": {
