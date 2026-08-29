@@ -15,6 +15,12 @@ import {
   type FormDefinition,
   type Primitive,
 } from "./conditions";
+import {
+  companyProperties,
+  resolveSiret,
+  type CompanyHit,
+  type CompanyMap,
+} from "./company";
 import { checkMapping, loadSchema, resolveObjects, type Problem } from "./properties";
 import { resolveApiKey } from "./settings";
 
@@ -57,7 +63,8 @@ export function publicForm(entry: FormEntry): PublicForm {
     locale: entry.locale ?? null,
     steps: (entry.definition?.steps ?? []).map((step) => ({
       ...step,
-      fields: (step.fields ?? []).map(({ hubspot: _hubspot, ...fld }) => fld),
+      // The CRM mappings are the server's business — never the browser's.
+      fields: (step.fields ?? []).map(({ hubspot: _hubspot, companyMap: _companyMap, ...fld }) => fld),
     })),
   };
 }
@@ -78,6 +85,9 @@ export function groupByObject(
   const groups: Record<string, Record<string, Primitive>> = {};
   for (const step of definition.steps ?? []) {
     for (const fld of step.fields ?? []) {
+      // Company fields map through `companyMap` in the submit pipeline — the
+      // display name must not fall back onto a `contact.<name>` property.
+      if (fld.type === "company") continue;
       const value = values[fld.name];
       if (value === undefined) continue;
       const mapping = (fld.hubspot ?? {}) as HubspotMapping;
@@ -101,6 +111,15 @@ export function mappingProblems(
   const problems: (Problem & { fieldId: string })[] = [];
   for (const step of definition.steps ?? []) {
     for (const fld of step.fields ?? []) {
+      // A company field maps several data at once — check each entry.
+      for (const mapping of Object.values((fld.companyMap ?? {}) as CompanyMap)) {
+        if (!mapping?.property?.trim()) continue;
+        const problem = checkMapping(portalProperties, {
+          object: mapping.object?.trim() || "company",
+          property: mapping.property,
+        });
+        if (problem) problems.push({ ...problem, fieldId: fld.id });
+      }
       const mapping = (fld.hubspot ?? {}) as HubspotMapping;
       if (!mapping.property) continue;
       const options = fld.options as { value?: string }[] | undefined;
@@ -224,6 +243,48 @@ function summaryLines(definition: FormDefinition, values: Record<string, Primiti
   return lines;
 }
 
+/** What a company field contributed to a submission — persisted with it. */
+export interface CompanyRecord {
+  field: string;
+  siret?: string;
+  name?: string;
+  /** True when the SIRET was re-resolved against SIRENE server-side. */
+  resolved: boolean;
+  closed?: boolean;
+}
+
+const SIRET_SHAPE = /^\d{14}$/;
+
+/**
+ * The browser's snapshot of the selected hit (`<name>__company`), used ONLY
+ * when the live re-resolution failed: parsed defensively, whitelisted keys,
+ * clipped strings — never trusted further than a display fallback.
+ */
+export function parseCompanySnapshot(raw: unknown): CompanyHit | null {
+  if (typeof raw !== "string" || !raw || raw.length > 5000) return null;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const str = (v: unknown, cap = 300) => (typeof v === "string" ? v.slice(0, cap) : undefined);
+  const hit: CompanyHit = {
+    siret: SIRET_SHAPE.test(String(parsed.siret ?? "")) ? String(parsed.siret) : "",
+    siren: /^\d{9}$/.test(String(parsed.siren ?? "")) ? String(parsed.siren) : "",
+    name: str(parsed.name) ?? "",
+    address: str(parsed.address),
+    zip: str(parsed.zip, 20),
+    city: str(parsed.city),
+    headquarters: parsed.headquarters === true,
+    naf: str(parsed.naf, 10),
+    nafLabel: str(parsed.nafLabel),
+    headcount: str(parsed.headcount, 50),
+  };
+  return hit.name || hit.siret ? hit : null;
+}
+
 export function createFormsService(
   strapi: Core.Strapi,
   _opts: { sleep?: (ms: number) => Promise<void> } = {},
@@ -269,6 +330,48 @@ export function createFormsService(
     return { accepted, rejected };
   }
 
+  /** Dedup by the mapped SIRET property: search it, update on hit, else null. */
+  async function findCompanyBySiret(
+    apiKey: string,
+    siretProperty: string,
+    siretValue: string,
+    props: Record<string, Primitive>,
+  ): Promise<string | undefined> {
+    const found = await hsJson<{ results?: { id: string }[] }>(apiKey, `${HS_COMPANIES}/search`, {
+      method: "POST",
+      body: {
+        filterGroups: [
+          { filters: [{ propertyName: siretProperty, operator: "EQ", value: siretValue }] },
+        ],
+        properties: [siretProperty],
+        limit: 1,
+      },
+    });
+    const existingId = found.results?.[0]?.id;
+    if (!existingId) return undefined;
+    const stringProps: Record<string, string> = {};
+    for (const [key, value] of Object.entries(props)) stringProps[key] = String(value);
+    await hsJson(apiKey, `${HS_COMPANIES}/${existingId}`, {
+      method: "PATCH",
+      body: { properties: stringProps },
+    });
+    return existingId;
+  }
+
+  /** Bare creation with the INSEE-derived properties — no dedup key matched. */
+  async function createCompany(
+    apiKey: string,
+    props: Record<string, Primitive>,
+  ): Promise<string | undefined> {
+    const stringProps: Record<string, string> = {};
+    for (const [key, value] of Object.entries(props)) stringProps[key] = String(value);
+    const created = await hsJson<{ id?: string }>(apiKey, HS_COMPANIES, {
+      method: "POST",
+      body: { properties: stringProps },
+    });
+    return created.id;
+  }
+
   /** `domain` isn't upsert-able in HubSpot: search it, then update-or-create. */
   async function resolveCompanyByDomain(
     apiKey: string,
@@ -310,6 +413,7 @@ export function createFormsService(
       meta: SubmitMeta;
       values: Record<string, Primitive>;
       rejected: Problem[];
+      companies?: CompanyRecord[];
     },
   ): Promise<void> {
     const lines: string[] = [];
@@ -319,6 +423,19 @@ export function createFormsService(
     if (opts.meta.originLabel) {
       const path = opts.meta.originPath ? ` (${escapeHtml(String(opts.meta.originPath))})` : "";
       lines.push(`<strong>Sujet</strong> : ${escapeHtml(String(opts.meta.originLabel))}${path}`);
+    }
+    for (const record of opts.companies ?? []) {
+      if (!record.name && !record.siret) continue;
+      const bits = [record.name, record.siret ? `SIRET ${record.siret}` : ""].filter(Boolean);
+      const flags = [
+        record.resolved ? "" : "non résolue via SIRENE",
+        record.closed ? "établissement fermé" : "",
+      ].filter(Boolean);
+      lines.push(
+        `<strong>Entreprise</strong> : ${escapeHtml(bits.join(" — "))}${
+          flags.length ? ` (${escapeHtml(flags.join(", "))})` : ""
+        }`,
+      );
     }
     lines.push("", ...summaryLines(opts.form.definition, opts.values));
     if (opts.rejected.length) {
@@ -371,9 +488,59 @@ export function createFormsService(
     let companyId: string | undefined;
     let rejected: Problem[] = [];
 
+    // Company fields (INSEE/SIRENE): the browser only nominated a SIRET — the
+    // server re-resolves it and owns the data that reaches the CRM. The
+    // browser snapshot is a display-grade fallback for an API outage, and a
+    // plain typed name maps through `companyMap.name` alone.
+    const companyRecords: CompanyRecord[] = [];
+    const companyGroups: Record<string, Record<string, Primitive>> = {};
+    let siretDedup: { property: string; value: string } | undefined;
+    for (const step of form.definition.steps ?? []) {
+      for (const fld of step.fields ?? []) {
+        if (fld.type !== "company" || resolution.hidden.includes(fld.name)) continue;
+        const typed = resolution.values[fld.name];
+        const siretRaw = rawValues[`${fld.name}__siret`];
+        const siret = typeof siretRaw === "string" && SIRET_SHAPE.test(siretRaw.trim())
+          ? siretRaw.trim()
+          : "";
+        if (typed === undefined && !siret) continue;
+        const map = (fld.companyMap ?? {}) as CompanyMap;
+
+        let hit = siret ? await resolveSiret(siret) : null;
+        const resolved = Boolean(hit);
+        if (!hit && siret) hit = parseCompanySnapshot(rawValues[`${fld.name}__company`]);
+
+        if (hit) {
+          for (const [object, props] of Object.entries(companyProperties(map, hit))) {
+            companyGroups[object] = { ...(companyGroups[object] ?? {}), ...props };
+          }
+          const siretProperty =
+            (map.siret?.object?.trim() || "company") === "company"
+              ? map.siret?.property?.trim()
+              : undefined;
+          if (!siretDedup && siretProperty && hit.siret) {
+            siretDedup = { property: siretProperty, value: hit.siret };
+          }
+        } else if (typed !== undefined && map.name?.property?.trim()) {
+          const object = map.name.object?.trim() || "company";
+          (companyGroups[object] ??= {})[map.name.property.trim()] = typed;
+        }
+        companyRecords.push({
+          field: fld.name,
+          siret: hit?.siret || undefined,
+          name: hit?.name || (typeof typed === "string" ? typed : undefined),
+          resolved,
+          closed: hit?.closed || undefined,
+        });
+      }
+    }
+
     // Best-effort CRM sync — a HubSpot outage must never lose the lead.
     if (email && apiKey) {
       const groups = groupByObject(form.definition, resolution.values);
+      for (const [object, props] of Object.entries(companyGroups)) {
+        groups[object] = { ...(groups[object] ?? {}), ...props };
+      }
       const partition = await partitionBySchema(apiKey, groups);
       rejected = partition.rejected;
 
@@ -390,14 +557,29 @@ export function createFormsService(
         contactId = result.id;
       }
 
+      // Dedup order: mapped SIRET property → corporate email domain → bare
+      // creation with the INSEE data. A personal email with a resolved SIRET
+      // therefore still gets its Company — the exact case the field exists for.
       const domain = corporateDomain(email);
-      if (contactId && domain && config.companyFromDomain) {
+      const companyProps = partition.accepted.company ?? {};
+      const wantsCompany =
+        Boolean(siretDedup) || Boolean(domain && config.companyFromDomain);
+      if (contactId && wantsCompany) {
         try {
-          companyId = await resolveCompanyByDomain(
-            apiKey,
-            domain,
-            partition.accepted.company ?? {},
-          );
+          if (siretDedup) {
+            companyId = await findCompanyBySiret(
+              apiKey,
+              siretDedup.property,
+              siretDedup.value,
+              companyProps,
+            );
+          }
+          if (!companyId && domain && config.companyFromDomain) {
+            companyId = await resolveCompanyByDomain(apiKey, domain, companyProps);
+          }
+          if (!companyId && siretDedup) {
+            companyId = await createCompany(apiKey, companyProps);
+          }
           if (companyId) {
             await hsJson(
               apiKey,
@@ -419,6 +601,7 @@ export function createFormsService(
             meta,
             values: resolution.values,
             rejected,
+            companies: companyRecords,
           });
         } catch (err) {
           strapi.log.warn(`[hubspot] lead note failed (contact OK) — ${(err as Error).message}`);
@@ -440,6 +623,7 @@ export function createFormsService(
         contactId,
         companyId,
         rejected,
+        companies: companyRecords,
       } as never,
     });
 

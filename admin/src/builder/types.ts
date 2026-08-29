@@ -36,7 +36,8 @@ export type FieldType =
   | "textarea"
   | "select"
   | "checkbox"
-  | "radio";
+  | "radio"
+  | "company";
 
 export const FIELD_TYPES: FieldType[] = [
   "text",
@@ -48,12 +49,40 @@ export const FIELD_TYPES: FieldType[] = [
   "select",
   "checkbox",
   "radio",
+  "company",
 ];
 
 export interface FieldOption {
   value: string;
   label?: string;
 }
+
+export type CompanyDatum =
+  | "name"
+  | "siret"
+  | "siren"
+  | "address"
+  | "zip"
+  | "city"
+  | "headquarters"
+  | "naf"
+  | "nafLabel"
+  | "headcount";
+
+export const COMPANY_DATA: CompanyDatum[] = [
+  "name",
+  "siret",
+  "siren",
+  "address",
+  "zip",
+  "city",
+  "headquarters",
+  "naf",
+  "nafLabel",
+  "headcount",
+];
+
+export type CompanyMap = Partial<Record<CompanyDatum, { object?: string; property?: string }>>;
 
 export interface FormField {
   id: string;
@@ -69,6 +98,10 @@ export interface FormField {
   persist?: "session" | "days30";
   options?: FieldOption[];
   hubspot?: { object?: string; property?: string };
+  /** Company fields: SIRENE datum → HubSpot property, resolved server-side. */
+  companyMap?: CompanyMap;
+  /** Company fields: rotating placeholder examples, one per line. */
+  placeholderExamples?: string[];
   visibleIf?: Condition | null;
 }
 

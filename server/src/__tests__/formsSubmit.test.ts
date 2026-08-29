@@ -17,6 +17,7 @@ const schemaBodies: Record<string, unknown> = {
     results: [
       { name: "email", label: "Email", type: "string" },
       { name: "firstname", label: "First name", type: "string" },
+      { name: "city", label: "City", type: "string" },
       {
         name: "hs_role",
         label: "Rôle",
@@ -30,6 +31,7 @@ const schemaBodies: Record<string, unknown> = {
       { name: "name", label: "Name", type: "string" },
       { name: "numberofemployees", label: "Employees", type: "number" },
       { name: "domain", label: "Domain", type: "string" },
+      { name: "siret_custom", label: "SIRET", type: "string" },
     ],
   },
   "/account-info/v3/details": {},
@@ -45,18 +47,21 @@ function mockFetch({
   upsertStatus = () => 200,
   companyFound = false,
   noteStatus = 200,
+  sirene = () => ({ status: 404, body: {} as unknown }),
 }: {
   upsertStatus?: (attempt: number) => number;
   companyFound?: boolean;
   noteStatus?: number;
+  sirene?: (query: string) => { status: number; body: unknown };
 } = {}) {
   let upsertAttempts = 0;
   const calls: Call[] = [];
   const fetchMock = vi.fn(async (url: string | URL, init?: { method?: string; body?: string }) => {
-    const path = new URL(String(url)).pathname;
+    const parsed = new URL(String(url));
+    const path = parsed.pathname;
     const call: Call = {
       method: init?.method ?? "GET",
-      path,
+      path: parsed.host.includes("recherche-entreprises") ? `sirene:${parsed.search}` : path,
       body: init?.body ? JSON.parse(init.body) : {},
     };
     calls.push(call);
@@ -66,6 +71,11 @@ function mockFetch({
       status,
       json: async () => body,
     });
+
+    if (parsed.host.includes("recherche-entreprises")) {
+      const res = sirene(parsed.search);
+      return respond(res.status, res.body);
+    }
 
     if (path.endsWith("/contacts/batch/upsert")) {
       upsertAttempts += 1;
@@ -360,5 +370,204 @@ describe("forms.submit", () => {
     expect(out).toMatchObject({ ok: true, hubspotSynced: false });
     expect(rows[SUBMISSION_UID][0]).toMatchObject({ hubspotSynced: false });
     expect(rows["plugin::hubspot.failure"]).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Company field (INSEE/SIRENE) pipeline
+
+const SIRET = "11122233300011";
+const sirenePayload = {
+  results: [
+    {
+      nom_raison_sociale: "TEST CORP",
+      nom_complet: "TEST CORP",
+      siren: "111222333",
+      activite_principale: "70.10Z",
+      tranche_effectif_salarie: "12",
+      siege: {
+        siret: SIRET,
+        adresse: "1 RUE X 75002 PARIS",
+        code_postal: "75002",
+        libelle_commune: "PARIS",
+        est_siege: true,
+        etat_administratif: "A",
+      },
+      matching_etablissements: [],
+    },
+  ],
+};
+
+const companyForm: FormEntry = {
+  name: "Contact société",
+  slug: "societe",
+  title: "Contact",
+  locale: "fr",
+  definition: {
+    version: 1,
+    steps: [
+      {
+        id: "s",
+        fields: [
+          {
+            id: "f_email",
+            name: "email",
+            label: "Email",
+            type: "email",
+            hubspot: { object: "contact", property: "email" },
+          },
+          {
+            id: "f_co",
+            name: "entreprise",
+            label: "Entreprise",
+            type: "company",
+            companyMap: {
+              name: { object: "company", property: "name" },
+              siret: { object: "company", property: "siret_custom" },
+              city: { object: "contact", property: "city" },
+            },
+          },
+        ],
+      },
+    ],
+  },
+};
+
+describe("forms.submit — company field", () => {
+  it("re-resolves the SIRET server-side and maps the INSEE data", async () => {
+    const { calls } = mockFetch({
+      companyFound: true,
+      sirene: () => ({ status: 200, body: sirenePayload }),
+    });
+    const { strapi, rows } = makeStrapi();
+    const out = await service(strapi).submit(
+      companyForm,
+      { email: "jane@gmail.com", entreprise: "Test Corp", entreprise__siret: SIRET },
+      meta,
+    );
+    expect(out).toMatchObject({ ok: true, hubspotSynced: true });
+
+    // The authority is the API, queried by the 14-digit siret.
+    expect(calls.some((c) => c.path === `sirene:?q=${SIRET}&per_page=1`)).toBe(true);
+
+    // contact-mapped datum rides the contact upsert…
+    const upsert = calls.find((c) => c.path.endsWith("/contacts/batch/upsert"));
+    expect(JSON.stringify(upsert?.body)).toContain('"city":"PARIS"');
+
+    // …and the company is deduped by the mapped SIRET property, gmail or not.
+    const search = calls.find((c) => c.path.endsWith("/companies/search"));
+    expect(JSON.stringify(search?.body)).toContain("siret_custom");
+    expect(JSON.stringify(search?.body)).toContain(SIRET);
+    const patch = calls.find((c) => c.method === "PATCH" && /\/companies\/company-1$/.test(c.path));
+    expect(JSON.stringify(patch?.body)).toContain('"name":"TEST CORP"');
+
+    // The resolved record is persisted with the submission.
+    const row = rows[SUBMISSION_UID][0];
+    expect(row.companies).toEqual([
+      expect.objectContaining({ field: "entreprise", siret: SIRET, name: "TEST CORP", resolved: true }),
+    ]);
+  });
+
+  it("falls back to the browser snapshot when the API is down — flagged unresolved", async () => {
+    const { calls } = mockFetch({ sirene: () => ({ status: 503, body: {} }) });
+    const { strapi, rows } = makeStrapi();
+    const snapshot = JSON.stringify({
+      siret: SIRET,
+      siren: "111222333",
+      name: "SNAP CORP",
+      city: "LYON",
+      headquarters: true,
+    });
+    await service(strapi).submit(
+      companyForm,
+      {
+        email: "jane@gmail.com",
+        entreprise: "Snap Corp",
+        entreprise__siret: SIRET,
+        entreprise__company: snapshot,
+      },
+      meta,
+    );
+    const upsert = calls.find((c) => c.path.endsWith("/contacts/batch/upsert"));
+    expect(JSON.stringify(upsert?.body)).toContain('"city":"LYON"');
+    expect(rows[SUBMISSION_UID][0].companies).toEqual([
+      expect.objectContaining({ name: "SNAP CORP", resolved: false }),
+    ]);
+  });
+
+  it("free text: only the name mapping receives the typed value, no SIRENE call", async () => {
+    const { calls } = mockFetch();
+    const { strapi, rows } = makeStrapi();
+    await service(strapi).submit(
+      companyForm,
+      { email: "jane@gmail.com", entreprise: "Ma Petite Boîte" },
+      meta,
+    );
+    expect(calls.some((c) => c.path.startsWith("sirene:"))).toBe(false);
+    // gmail + no siret: nothing dedupes a company — none is searched or created.
+    expect(calls.some((c) => c.path.endsWith("/companies/search"))).toBe(false);
+    expect(calls.some((c) => c.method === "POST" && c.path.endsWith("/objects/companies"))).toBe(false);
+    const row = rows[SUBMISSION_UID][0];
+    expect(row.companies).toEqual([
+      expect.objectContaining({ field: "entreprise", name: "Ma Petite Boîte", resolved: false }),
+    ]);
+  });
+
+  it("ignores companion keys of a hidden company field", async () => {
+    const hiddenForm: FormEntry = {
+      ...companyForm,
+      definition: {
+        version: 1,
+        steps: [
+          {
+            id: "s",
+            fields: [
+              {
+                id: "f_email",
+                name: "email",
+                label: "Email",
+                type: "email",
+                hubspot: { object: "contact", property: "email" },
+              },
+              {
+                id: "f_pro",
+                name: "pro",
+                label: "Pro ?",
+                type: "checkbox",
+              },
+              {
+                ...companyForm.definition.steps[0].fields[1],
+                visibleIf: { logic: "and", rules: [{ field: "f_pro", operator: "eq", value: "true" }] },
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const { calls } = mockFetch({ sirene: () => ({ status: 200, body: sirenePayload }) });
+    const { strapi, rows } = makeStrapi();
+    await service(strapi).submit(
+      hiddenForm,
+      { email: "jane@gmail.com", pro: false, entreprise: "X", entreprise__siret: SIRET },
+      meta,
+    );
+    expect(calls.some((c) => c.path.startsWith("sirene:"))).toBe(false);
+    expect(rows[SUBMISSION_UID][0].companies).toEqual([]);
+  });
+
+  it("prefers the SIRET dedup over the email-domain dedup when both exist", async () => {
+    const { calls } = mockFetch({
+      companyFound: true,
+      sirene: () => ({ status: 200, body: sirenePayload }),
+    });
+    const { strapi } = makeStrapi();
+    await service(strapi).submit(
+      companyForm,
+      { email: "jane@acme.com", entreprise: "Test Corp", entreprise__siret: SIRET },
+      meta,
+    );
+    const search = calls.find((c) => c.path.endsWith("/companies/search"));
+    expect(JSON.stringify(search?.body)).toContain("siret_custom");
+    expect(JSON.stringify(search?.body)).not.toContain("acme.com");
   });
 });

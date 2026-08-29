@@ -12,6 +12,7 @@ import {
   IconButton,
   SingleSelect,
   SingleSelectOption,
+  Textarea,
   TextInput,
   Typography,
 } from "@strapi/design-system";
@@ -19,8 +20,9 @@ import { ArrowClockwise, Plus, Trash } from "@strapi/icons";
 import { getTranslation } from "../getTranslation";
 import { objectLabel } from "../objectLabels";
 import { useHubspotSchema } from "../useHubspotSchema";
+import CompanyMapEditor from "./CompanyMapEditor";
 import ConditionEditor from "./ConditionEditor";
-import { FIELD_TYPES, type FieldType, type FormField, type MappingProblem } from "./types";
+import { FIELD_TYPES, type CompanyMap, type FieldType, type FormField, type MappingProblem } from "./types";
 
 interface Props {
   field: FormField;
@@ -54,6 +56,15 @@ const FieldPanel = ({ field, candidates, problem, onChange }: Props) => {
   const properties = (schema?.properties ?? []).filter((p) => p.object === object);
   const selected = properties.find((p) => p.name === field.hubspot?.property);
   const isChoice = field.type === "select" || field.type === "radio";
+  const isCompany = field.type === "company";
+
+  /** Sensible pre-mapping when a field becomes a company field. */
+  const DEFAULT_COMPANY_MAP: CompanyMap = {
+    name: { object: "company", property: "name" },
+    address: { object: "company", property: "address" },
+    zip: { object: "company", property: "zip" },
+    city: { object: "company", property: "city" },
+  };
 
   const setHubspot = (patch: Partial<NonNullable<FormField["hubspot"]>>) =>
     onChange({ hubspot: { ...field.hubspot, ...patch } });
@@ -104,7 +115,12 @@ const FieldPanel = ({ field, candidates, problem, onChange }: Props) => {
         <Field.Label>{t("panel.type", "Type")}</Field.Label>
         <SingleSelect
           value={field.type}
-          onChange={(v: string | number) => onChange({ type: v as FieldType })}
+          onChange={(v: string | number) =>
+            onChange({
+              type: v as FieldType,
+              ...(v === "company" && !field.companyMap ? { companyMap: DEFAULT_COMPANY_MAP } : {}),
+            })
+          }
         >
           {FIELD_TYPES.map((type) => (
             <SingleSelectOption key={type} value={type}>
@@ -117,13 +133,35 @@ const FieldPanel = ({ field, candidates, problem, onChange }: Props) => {
       <Flex gap={4}>
         <Box flex="1">
           <Field.Root>
-            <Field.Label>{t("panel.placeholder", "Placeholder")}</Field.Label>
-            <TextInput
-              value={field.placeholder ?? ""}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                onChange({ placeholder: e.target.value })
-              }
-            />
+            <Field.Label>
+              {isCompany
+                ? t("company.examples", "Placeholder examples (one per line)")
+                : t("panel.placeholder", "Placeholder")}
+            </Field.Label>
+            {isCompany ? (
+              <Textarea
+                value={(field.placeholderExamples ?? []).join("\n")}
+                placeholder={t(
+                  "company.examples-placeholder",
+                  "Ex. : un établissement d'un grand groupe\nEx. : le siège de votre PME",
+                )}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  onChange({
+                    placeholderExamples: e.target.value
+                      .split("\n")
+                      .map((line) => line.trim())
+                      .filter(Boolean),
+                  })
+                }
+              />
+            ) : (
+              <TextInput
+                value={field.placeholder ?? ""}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  onChange({ placeholder: e.target.value })
+                }
+              />
+            )}
           </Field.Root>
         </Box>
         <Box flex="1">
@@ -262,7 +300,9 @@ const FieldPanel = ({ field, candidates, problem, onChange }: Props) => {
       <Flex direction="column" alignItems="stretch" gap={2}>
         <Flex justifyContent="space-between" alignItems="center">
           <Typography variant="sigma" textColor="neutral600">
-            {t("panel.hubspot", "HubSpot")}
+            {isCompany
+              ? t("company.section", "Company data (INSEE → HubSpot)")
+              : t("panel.hubspot", "HubSpot")}
           </Typography>
           <IconButton
             label={t("panel.refresh", "Refresh the portal schema")}
@@ -273,6 +313,22 @@ const FieldPanel = ({ field, candidates, problem, onChange }: Props) => {
           </IconButton>
         </Flex>
 
+        {isCompany && (
+          <>
+            <Typography variant="pi" textColor="neutral600">
+              {t(
+                "company.section-hint",
+                "The visitor picks their company from the SIRENE registry; the server re-resolves the SIRET and sends each datum below to its property.",
+              )}
+            </Typography>
+            <CompanyMapEditor
+              map={field.companyMap ?? {}}
+              onChange={(companyMap) => onChange({ companyMap })}
+            />
+          </>
+        )}
+
+        {!isCompany && (
         <Field.Root>
           <Field.Label>{t("panel.object", "Object")}</Field.Label>
           <SingleSelect
@@ -289,7 +345,9 @@ const FieldPanel = ({ field, candidates, problem, onChange }: Props) => {
             ))}
           </SingleSelect>
         </Field.Root>
+        )}
 
+        {!isCompany && (
         <Field.Root>
           <Field.Label>{t("panel.property", "Property")}</Field.Label>
           <Combobox
@@ -318,8 +376,9 @@ const FieldPanel = ({ field, candidates, problem, onChange }: Props) => {
             </Typography>
           )}
         </Field.Root>
+        )}
 
-        {deepLink && (
+        {!isCompany && deepLink && (
           <a href={deepLink} target="_blank" rel="noreferrer">
             <Typography variant="pi" textColor="primary600">
               {t("panel.view-in-hubspot", "View in HubSpot ↗")}

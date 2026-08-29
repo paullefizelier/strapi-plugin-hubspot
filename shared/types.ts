@@ -45,11 +45,44 @@ export type FieldType =
   | "textarea"
   | "select"
   | "checkbox"
-  | "radio";
+  | "radio"
+  | "company";
 
 export interface FieldOption {
   value: string;
   label?: string;
+}
+
+/** One datum a company field can resolve from SIRENE and map to the CRM. */
+export type CompanyDatum =
+  | "name"
+  | "siret"
+  | "siren"
+  | "address"
+  | "zip"
+  | "city"
+  | "headquarters"
+  | "naf"
+  | "nafLabel"
+  | "headcount";
+
+/** One SIRENE hit, as GET /api/hubspot/company-search serves it. */
+export interface CompanyHit {
+  siret: string;
+  siren: string;
+  name: string;
+  address?: string;
+  zip?: string;
+  city?: string;
+  headquarters: boolean;
+  naf?: string;
+  nafLabel?: string;
+  headcount?: string;
+}
+
+/** GET /api/hubspot/company-search?q= */
+export interface CompanySearchResponse {
+  companies: CompanyHit[];
 }
 
 /** A field as the public endpoint serves it — the CRM mapping is stripped. */
@@ -66,6 +99,8 @@ export interface PublicFormField {
   required?: boolean;
   persist?: "session" | "days30";
   options?: FieldOption[];
+  /** Company fields: rotating placeholder examples, in display order. */
+  placeholderExamples?: string[];
   visibleIf?: Condition | null;
 }
 

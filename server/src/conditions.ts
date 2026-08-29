@@ -69,6 +69,7 @@ export interface SubmissionResolution {
 export type DefinitionError =
   | { code: "duplicate-name"; fieldId: string; name: string }
   | { code: "missing-name"; fieldId: string; name: string }
+  | { code: "companion-collision"; fieldId: string; name: string }
   | { code: "unknown-field"; fieldId?: string; stepId?: string; target: string }
   | { code: "forward-reference"; fieldId?: string; stepId?: string; target: string }
   | { code: "missing-value"; fieldId?: string; stepId?: string; target: string };
@@ -119,6 +120,18 @@ export function validateDefinition(definition: FormDefinition): DefinitionError[
     }
   };
 
+  // Company fields own the flat companion keys `<name>__siret` and
+  // `<name>__company` in the submission payload — no field may claim them.
+  const reservedNames = new Set<string>();
+  for (const step of definition.steps ?? []) {
+    for (const fld of step.fields ?? []) {
+      if (fld.type === "company" && fld.name?.trim()) {
+        reservedNames.add(`${fld.name}__siret`);
+        reservedNames.add(`${fld.name}__company`);
+      }
+    }
+  }
+
   const seen = new Set<string>();
   const seenNames = new Set<string>();
   for (const step of definition.steps ?? []) {
@@ -128,6 +141,8 @@ export function validateDefinition(definition: FormDefinition): DefinitionError[
         errors.push({ code: "missing-name", fieldId: fld.id, name: fld.name ?? "" });
       } else if (seenNames.has(fld.name)) {
         errors.push({ code: "duplicate-name", fieldId: fld.id, name: fld.name });
+      } else if (reservedNames.has(fld.name)) {
+        errors.push({ code: "companion-collision", fieldId: fld.id, name: fld.name });
       } else {
         seenNames.add(fld.name);
       }
