@@ -202,7 +202,7 @@ async function query(params: string): Promise<SearchPayload | null> {
  */
 export function normalizeQuery(q: string): string {
   const trimmed = q.trim();
-  const digits = trimmed.replace(/[\s.\-]/g, "");
+  const digits = trimmed.replace(/[\s.-]/g, "");
   return /^\d{9}$/.test(digits) || /^\d{14}$/.test(digits) ? digits : trimmed;
 }
 

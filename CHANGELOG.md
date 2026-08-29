@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.1 — 2026-08-29
+
+Ships the company-search sharpening that missed the 0.11.0 tarball (the
+release was published before its PR merged):
+
+- pasted SIRET/SIREN identifiers survive their formatting (spaces, dots,
+  dashes) and query directly;
+- closed structures excluded at the source (`etat_administratif=A`);
+- big groups surface up to 5 matching établissements.
+
 ## 0.11.0 — 2026-08-29
 
 ### Added — the `company` field (INSEE/SIRENE)
