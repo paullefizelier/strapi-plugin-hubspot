@@ -8,7 +8,8 @@
 
 import type { Core } from "@strapi/strapi";
 import { validateDefinition, type FormDefinition } from "./conditions";
-import { mappingProblems, type FormEntry } from "./forms";
+import { mappingProblems, SUBMISSION_UID, type FormEntry } from "./forms";
+import { convertHubspotForm, fetchHubspotForm, listHubspotForms } from "./importHubspot";
 import { convertLegacyForm, type ImportMap } from "./importLegacy";
 import { loadSchema, resolveObjects, type Problem } from "./properties";
 import { resolveApiKey } from "./settings";
@@ -112,8 +113,18 @@ export function createFormsAdminController(strapi: Core.Strapi) {
         fields: ["slug"],
       } as never)) as unknown as { documentId: string }[];
       const publishedIds = new Set(published.map((e) => e.documentId));
+      // One count per form: the list is short, and the number is the door to
+      // the Submissions tab — worth a query each.
+      const submissionCounts = await Promise.all(
+        drafts.map(
+          (entry) =>
+            strapi.documents(SUBMISSION_UID as never).count({
+              filters: { form: entry.slug },
+            } as never) as unknown as Promise<number>,
+        ),
+      );
       ctx.body = {
-        forms: drafts.map((entry) => ({
+        forms: drafts.map((entry, i) => ({
           documentId: entry.documentId,
           name: entry.name,
           slug: entry.slug,
@@ -124,6 +135,7 @@ export function createFormsAdminController(strapi: Core.Strapi) {
             (n, step) => n + (step.fields?.length ?? 0),
             0,
           ),
+          submissions: submissionCounts[i] ?? 0,
         })),
       };
     },
@@ -344,6 +356,71 @@ export function createFormsAdminController(strapi: Core.Strapi) {
 
       if (!targetId) ctx.throw(404, "Source entry not found");
       ctx.body = { documentId: targetId, locales: imported };
+    },
+
+    /**
+     * Forms of the connected HubSpot portal, offered for import. Needs the
+     * `forms` read scope on the private app token — a token without it gets
+     * a clear message rather than an empty list.
+     */
+    async listHubspotSources(ctx: Ctx) {
+      const { apiKey } = await resolveApiKey(strapi);
+      if (!apiKey) {
+        ctx.body = { configured: false, forms: [] };
+        return;
+      }
+      try {
+        ctx.body = { configured: true, forms: await listHubspotForms(apiKey) };
+      } catch (err) {
+        strapi.log.warn(`[hubspot] portal forms unavailable — ${(err as Error).message}`);
+        ctx.throw(502, (err as Error).message || "Cannot reach HubSpot");
+      }
+    },
+
+    /**
+     * Converts one portal form into a plugin form draft, in the current
+     * locale. Slug derived from the HubSpot name: re-importing the same form
+     * overwrites the draft — never the published version, never the portal.
+     * What the builder can't express is skipped and returned in `skipped`.
+     */
+    async runHubspotImport(ctx: Ctx) {
+      const formId = ctx.request.body?.formId;
+      if (typeof formId !== "string" || !formId) ctx.throw(400, "formId is required");
+      const { apiKey } = await resolveApiKey(strapi);
+      if (!apiKey) ctx.throw(400, "No HubSpot API key configured");
+
+      let converted: ReturnType<typeof convertHubspotForm>;
+      try {
+        converted = convertHubspotForm(await fetchHubspotForm(apiKey, formId));
+      } catch (err) {
+        strapi.log.warn(`[hubspot] form import failed — ${(err as Error).message}`);
+        ctx.throw(502, (err as Error).message || "Cannot reach HubSpot");
+        return;
+      }
+
+      const name = converted.name || "HubSpot form";
+      const { skipped, definition, ...meta } = converted;
+      const slug = slugify(name);
+      const existing = (await documents().findFirst({
+        filters: { slug },
+      } as never)) as unknown as { documentId: string } | null;
+
+      let documentId: string;
+      if (existing) {
+        await documents().update({
+          documentId: existing.documentId,
+          locale: ctx.query.locale,
+          data: { ...meta, name, definition } as never,
+        } as never);
+        documentId = existing.documentId;
+      } else {
+        const created = (await documents().create({
+          locale: ctx.query.locale,
+          data: { ...meta, name, slug, definition } as never,
+        } as never)) as unknown as { documentId: string };
+        documentId = created.documentId;
+      }
+      ctx.body = { documentId, skipped };
     },
 
     /**

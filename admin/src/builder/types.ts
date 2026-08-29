@@ -95,6 +95,41 @@ export interface FormListRow {
   published: boolean;
   steps: number;
   fields: number;
+  submissions: number;
+}
+
+/** One form of the connected portal, offered for import. */
+export interface HubspotSource {
+  id: string;
+  name: string;
+  updatedAt?: string;
+}
+
+/** What a HubSpot import couldn't carry over (mirrors server SkippedItem). */
+export interface SkippedItem {
+  code:
+    | "field-type"
+    | "hidden-field"
+    | "object"
+    | "duplicate"
+    | "condition"
+    | "rich-text"
+    | "legal-consent";
+  label?: string;
+  detail?: string;
+}
+
+/** One stored submission, as the admin list serves it. */
+export interface SubmissionRowDto {
+  documentId: string;
+  form: string;
+  formTitle?: string | null;
+  email?: string | null;
+  values: Record<string, string | number | boolean>;
+  meta?: Record<string, string> | null;
+  locale?: string | null;
+  hubspotSynced?: boolean;
+  createdAt?: string;
 }
 
 export interface DefinitionError {

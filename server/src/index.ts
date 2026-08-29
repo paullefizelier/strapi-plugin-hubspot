@@ -5,12 +5,14 @@ import {
   createFormsService,
   publicForm,
   sanitizeRawValues,
+  SUBMISSION_UID,
   type FormEntry,
   type SubmitMeta,
 } from "./forms";
 import { createFormsAdminController, FORM_UID } from "./formsAdmin";
 import { loadSchema, resolveObjects } from "./properties";
 import { publicSettings, resolveApiKey, setStoredSettings } from "./settings";
+import { fieldOrder, submissionsCsv, type SubmissionRow } from "./submissions";
 import { createSubmitService, FAILURE_UID } from "./submit";
 import { makeValidationMiddleware, type ValidateTarget } from "./validation";
 
@@ -119,6 +121,58 @@ const controllers = {
 
   formsAdmin: ({ strapi }: { strapi: Core.Strapi }) => createFormsAdminController(strapi),
 
+  submissions: ({ strapi }: { strapi: Core.Strapi }) => ({
+    /** Paged submissions, newest first, optionally narrowed to one form. */
+    async list(ctx: {
+      query: { form?: string; page?: string; pageSize?: string };
+      body: unknown;
+    }) {
+      const filters = ctx.query.form ? { form: ctx.query.form } : undefined;
+      const page = Math.max(1, Number(ctx.query.page) || 1);
+      const pageSize = Math.min(100, Math.max(1, Number(ctx.query.pageSize) || 20));
+      const [rows, total] = await Promise.all([
+        strapi.documents(SUBMISSION_UID as never).findMany({
+          filters,
+          sort: "createdAt:desc",
+          limit: pageSize,
+          start: (page - 1) * pageSize,
+        } as never) as unknown as Promise<SubmissionRow[]>,
+        strapi.documents(SUBMISSION_UID as never).count({ filters } as never) as unknown as Promise<number>,
+      ]);
+      ctx.body = { submissions: rows, total, page, pageSize };
+    },
+
+    /**
+     * Whole history of one form as CSV, definition columns first. Returned as
+     * JSON (`{ csv, filename }`): the admin fetch client speaks JSON, and the
+     * page turns it into a download — no auth-header gymnastics.
+     */
+    async export(ctx: {
+      query: { form?: string };
+      body: unknown;
+      throw: (s: number, m: string) => never;
+    }) {
+      const slug = ctx.query.form;
+      if (!slug) ctx.throw(400, "form is required");
+      const [rows, entry] = await Promise.all([
+        strapi.documents(SUBMISSION_UID as never).findMany({
+          filters: { form: slug },
+          sort: "createdAt:desc",
+          limit: 10000,
+        } as never) as unknown as Promise<SubmissionRow[]>,
+        strapi.documents(FORM_UID as never).findFirst({
+          filters: { slug },
+          status: "draft",
+        } as never) as unknown as Promise<FormEntry | null>,
+      ]);
+      ctx.body = {
+        csv: submissionsCsv(rows, fieldOrder(entry?.definition)),
+        filename: `${slug}-submissions-${new Date().toISOString().slice(0, 10)}.csv`,
+        total: rows.length,
+      };
+    },
+  }),
+
   forms: ({ strapi }: { strapi: Core.Strapi }) => ({
     /** Published form for the host frontend — CRM mapping stripped. */
     async findOne(ctx: {
@@ -225,6 +279,10 @@ const routes = {
       adminRoute("GET", "/forms-options", "formsAdmin.options"),
       adminRoute("GET", "/builder/import/sources", "formsAdmin.listSources", [FORMS_ACTION]),
       adminRoute("POST", "/builder/import", "formsAdmin.runImport", [FORMS_ACTION]),
+      adminRoute("GET", "/builder/import/hubspot", "formsAdmin.listHubspotSources", [FORMS_ACTION]),
+      adminRoute("POST", "/builder/import/hubspot", "formsAdmin.runHubspotImport", [FORMS_ACTION]),
+      adminRoute("GET", "/builder/submissions", "submissions.list", [FORMS_ACTION]),
+      adminRoute("GET", "/builder/submissions/export", "submissions.export", [FORMS_ACTION]),
     ],
   },
   // Public form delivery + submission, under /api/hubspot/…. Like any
