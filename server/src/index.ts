@@ -219,6 +219,7 @@ const routes = {
       adminRoute("POST", "/builder/forms/:documentId/publish", "formsAdmin.publish", [FORMS_ACTION]),
       adminRoute("POST", "/builder/forms/:documentId/unpublish", "formsAdmin.unpublish", [FORMS_ACTION]),
       adminRoute("DELETE", "/builder/forms/:documentId", "formsAdmin.remove", [FORMS_ACTION]),
+      adminRoute("POST", "/builder/forms/:documentId/duplicate", "formsAdmin.duplicate", [FORMS_ACTION]),
       // No FORMS_ACTION: editors pick forms from the Content Manager, like
       // they pick properties — the builder itself stays gated.
       adminRoute("GET", "/forms-options", "formsAdmin.options"),

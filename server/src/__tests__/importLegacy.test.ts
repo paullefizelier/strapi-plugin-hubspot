@@ -10,6 +10,7 @@ const legacy = {
   nextLabel: "Suivant",
   submitLabel: "Envoyer",
   successMessage: "Merci !",
+  class: "form--legacy",
   steps: [
     {
       title: "Votre besoin",
@@ -61,6 +62,7 @@ describe("convertLegacyForm", () => {
       nextLabel: "Suivant",
       submitLabel: "Envoyer",
       successMessage: "Merci !",
+      class: "form--legacy",
     });
   });
 

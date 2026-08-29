@@ -92,8 +92,8 @@
   "forms.col-structure": "Structure",
   "forms.col-status": "Status",
   "forms.col-updated": "Updated",
-  "forms.col-actions": "",
-  "forms.structure": "{steps} steps · {fields} fields",
+  "forms.col-actions": "Actions",
+  "forms.structure": "{steps, plural, one {# step} other {# steps}} · {fields, plural, one {# field} other {# fields}}",
   "forms.published": "Published",
   "forms.draft": "Draft",
   "forms.delete": "Delete",
@@ -197,5 +197,12 @@
   "form-picker.placeholder": "Choose a form…",
   "form-picker.fallback": "Form slug",
   "form-picker.orphan": "{slug} — unknown form",
-  "form-picker.draft": "{name} ({slug}) — draft, not served yet"
+  "form-picker.draft": "{name} ({slug}) — draft, not served yet",
+  "forms.duplicate": "Duplicate",
+  "forms.duplicate-error": "Could not duplicate the form.",
+  "panel.icon": "Icon",
+  "panel.persist": "Answer memory",
+  "panel.persist-session": "This visit only",
+  "panel.persist-days30": "30 days (non-identifying fields only)",
+  "panel.class": "CSS classes"
 }

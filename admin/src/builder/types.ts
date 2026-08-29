@@ -81,6 +81,7 @@ export interface FormEntryDto {
   nextLabel?: string | null;
   submitLabel?: string | null;
   successMessage?: string | null;
+  class?: string | null;
   locale?: string | null;
   updatedAt?: string;
   definition: FormDefinition;

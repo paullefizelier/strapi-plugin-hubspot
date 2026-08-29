@@ -19,7 +19,7 @@ import {
   Tr,
   Typography,
 } from "@strapi/design-system";
-import { Plus, Trash } from "@strapi/icons";
+import { Duplicate, Plus, Trash } from "@strapi/icons";
 import { useFetchClient } from "@strapi/strapi/admin";
 import { getTranslation } from "../getTranslation";
 import { PLUGIN_ID } from "../pluginId";
@@ -86,6 +86,20 @@ const FormsList = () => {
       navigate(data.form.documentId);
     } catch {
       setError(t("forms.create-error", "Could not create the form."));
+      setBusy(false);
+    }
+  };
+
+  const duplicate = async (row: FormListRow) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { data } = await post<{ documentId: string }>(
+        `/${PLUGIN_ID}/builder/forms/${row.documentId}/duplicate`,
+      );
+      navigate(data.documentId);
+    } catch {
+      setError(t("forms.duplicate-error", "Could not duplicate the form."));
       setBusy(false);
     }
   };
@@ -202,7 +216,7 @@ const FormsList = () => {
                 <Typography variant="sigma">{t("forms.col-updated", "Updated")}</Typography>
               </Th>
               <Th>
-                <Typography variant="sigma">{t("forms.col-actions", "")}</Typography>
+                <Typography variant="sigma">{t("forms.col-actions", "Actions")}</Typography>
               </Th>
             </Tr>
           </Thead>
@@ -221,7 +235,7 @@ const FormsList = () => {
                 </Td>
                 <Td>
                   <Typography textColor="neutral600">
-                    {t("forms.structure", "{steps} steps · {fields} fields", {
+                    {t("forms.structure", "{steps, plural, one {# step} other {# steps}} · {fields, plural, one {# field} other {# fields}}", {
                       steps: row.steps,
                       fields: row.fields,
                     })}
@@ -244,13 +258,22 @@ const FormsList = () => {
                   </Typography>
                 </Td>
                 <Td onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                  <IconButton
-                    label={t("forms.delete", "Delete")}
-                    onClick={() => remove(row)}
-                    disabled={busy}
-                  >
-                    <Trash />
-                  </IconButton>
+                  <Flex gap={1}>
+                    <IconButton
+                      label={t("forms.duplicate", "Duplicate")}
+                      onClick={() => duplicate(row)}
+                      disabled={busy}
+                    >
+                      <Duplicate />
+                    </IconButton>
+                    <IconButton
+                      label={t("forms.delete", "Delete")}
+                      onClick={() => remove(row)}
+                      disabled={busy}
+                    >
+                      <Trash />
+                    </IconButton>
+                  </Flex>
                 </Td>
               </Tr>
             ))}

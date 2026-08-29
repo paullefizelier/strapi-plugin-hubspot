@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.0 — 2026-08-29
+
+### Improved (builder UX pass, from a live session)
+- **The whole step card now selects the step** — the click target was the tiny
+  "Step N" text, which read as "step titles can't be edited". Inner controls
+  stop propagation, so field selection and the action buttons are unaffected.
+- Field panel gains the imported-but-invisible settings: **icon**, **answer
+  memory (persist)** and **CSS classes**; the step and form panels gain **CSS
+  classes** too.
+- **Form-level `class`** now exists end to end: content-type attribute, save,
+  public API, legacy import (it used to be silently dropped on migration).
+- **Duplicate** action on the forms list — every locale of the draft is
+  copied under a fresh slug.
+- Leaving the editor with unsaved changes now warns before the tab closes.
+- Cosmetics: the actions column no longer shows a raw translation key, and the
+  structure column pluralizes properly.
+
 ## 0.7.0 — 2026-08-29
 
 ### Added

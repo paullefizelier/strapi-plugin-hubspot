@@ -1,6 +1,6 @@
 {
   "name": "strapi-plugin-hubspot",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "The form builder for HubSpot in Strapi — multi-step forms with conditional fields mapped to real CRM properties, a public submit pipeline with retries, and save-time mapping validation.",
   "keywords": [
     "strapi",
