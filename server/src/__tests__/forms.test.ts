@@ -252,3 +252,43 @@ describe("mappingProblems", () => {
     };
   }
 });
+
+describe("company field — publicForm & mappingProblems", () => {
+  const companyDef: FormDefinition = {
+    version: 1,
+    steps: [
+      {
+        id: "s",
+        fields: [
+          {
+            id: "fld_co",
+            name: "entreprise",
+            label: "Entreprise",
+            type: "company",
+            placeholderExamples: ["Ex. : Actual Leader Group", "Ex. : le siège d'une PME"],
+            companyMap: {
+              name: { object: "company", property: "name" },
+              siret: { object: "company", property: "hs_rôle" }, // unknown on purpose
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  it("publicForm strips companyMap but serves placeholderExamples", () => {
+    const out = publicForm({ name: "X", slug: "x", definition: companyDef });
+    const fld = out.steps[0].fields[0];
+    expect(fld).not.toHaveProperty("companyMap");
+    expect(fld.placeholderExamples).toEqual(["Ex. : Actual Leader Group", "Ex. : le siège d'une PME"]);
+  });
+
+  it("mappingProblems checks each companyMap entry against the portal", () => {
+    const portal = [
+      { name: "name", label: "Name", object: "company", type: "string" as const, options: [] },
+    ];
+    const problems = mappingProblems(companyDef, portal);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatchObject({ fieldId: "fld_co", code: "unknown", property: "hs_rôle" });
+  });
+});

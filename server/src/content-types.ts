@@ -94,6 +94,7 @@ export default {
         contactId: { type: "string" },
         companyId: { type: "string" },
         rejected: { type: "json" },
+        companies: { type: "json" },
       },
     },
   },

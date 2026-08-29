@@ -251,5 +251,21 @@
   "condition.op.startsWith": "commence par",
   "condition.op.endsWith": "finit par",
   "condition.values": "Valeurs",
-  "condition.values-placeholder": "valeur1, valeur2…"
+  "condition.values-placeholder": "valeur1, valeur2…",
+  "company.section": "Données entreprise (INSEE → HubSpot)",
+  "company.section-hint": "Le visiteur choisit son entreprise dans la base SIRENE ; le serveur re-résout le SIRET et envoie chaque donnée ci-dessous vers sa propriété.",
+  "company.examples": "Exemples de placeholder (un par ligne)",
+  "company.examples-placeholder": "Ex. : un établissement d'un grand groupe\nEx. : le siège de votre PME",
+  "company.add-datum": "Envoyer une autre donnée",
+  "company.remove-datum": "Ne plus envoyer cette donnée",
+  "company.datum.name": "Raison sociale",
+  "company.datum.siret": "SIRET",
+  "company.datum.siren": "SIREN",
+  "company.datum.address": "Adresse",
+  "company.datum.zip": "Code postal",
+  "company.datum.city": "Ville",
+  "company.datum.headquarters": "Est le siège",
+  "company.datum.naf": "Code NAF",
+  "company.datum.nafLabel": "Libellé NAF",
+  "company.datum.headcount": "Tranche d'effectif"
 }

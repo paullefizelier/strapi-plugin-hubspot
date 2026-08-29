@@ -387,3 +387,23 @@ describe("validateDefinition — list operators", () => {
     ]);
   });
 });
+
+describe("validateDefinition — company companion keys", () => {
+  it("flags a field name colliding with a company field's companion keys", () => {
+    const def = oneStep([
+      field("fld_a", "entreprise", { type: "company" }),
+      field("fld_b", "entreprise__siret"),
+    ]);
+    expect(validateDefinition(def)).toEqual([
+      { code: "companion-collision", fieldId: "fld_b", name: "entreprise__siret" },
+    ]);
+  });
+
+  it("accepts unrelated __ names and company fields without collisions", () => {
+    const def = oneStep([
+      field("fld_a", "entreprise", { type: "company" }),
+      field("fld_b", "autre__chose"),
+    ]);
+    expect(validateDefinition(def)).toEqual([]);
+  });
+});

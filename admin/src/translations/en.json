@@ -251,5 +251,21 @@
   "condition.op.startsWith": "starts with",
   "condition.op.endsWith": "ends with",
   "condition.values": "Values",
-  "condition.values-placeholder": "value1, value2…"
+  "condition.values-placeholder": "value1, value2…",
+  "company.section": "Company data (INSEE → HubSpot)",
+  "company.section-hint": "The visitor picks their company from the SIRENE registry; the server re-resolves the SIRET and sends each datum below to its property.",
+  "company.examples": "Placeholder examples (one per line)",
+  "company.examples-placeholder": "Ex. : un établissement d'un grand groupe\nEx. : le siège de votre PME",
+  "company.add-datum": "Send another datum",
+  "company.remove-datum": "Stop sending this datum",
+  "company.datum.name": "Legal name",
+  "company.datum.siret": "SIRET",
+  "company.datum.siren": "SIREN",
+  "company.datum.address": "Address",
+  "company.datum.zip": "Postal code",
+  "company.datum.city": "City",
+  "company.datum.headquarters": "Is headquarters",
+  "company.datum.naf": "NAF code",
+  "company.datum.nafLabel": "NAF label",
+  "company.datum.headcount": "Headcount range"
 }

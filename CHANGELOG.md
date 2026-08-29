@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.11.0 — 2026-08-29
+
+### Added — the `company` field (INSEE/SIRENE)
+- New field type **`company`**: the visitor picks their company from the
+  French SIRENE registry (Recherche d'entreprises API — no key), siège and
+  matching établissements offered separately, closed ones filtered. Free text
+  stays allowed: an unfindable company submits its typed name alone.
+- **The server is the authority**: the browser only nominates a SIRET; at
+  submission the plugin re-resolves it against SIRENE and maps fresh data. If
+  the API is down, the browser's snapshot is used and flagged unresolved.
+- **Per-datum HubSpot mapping** (`companyMap`, server-side only — stripped
+  from the public API): legal name, SIRET, SIREN, address, postal code, city,
+  is-headquarters, NAF code + label (embedded NAF rev. 2 table), INSEE
+  headcount range — each with its own object + property picker in the builder.
+- **Company dedup order**: mapped SIRET property → corporate email domain →
+  bare creation with the INSEE data. A personal email with a resolved SIRET
+  still gets its Company — the exact case the field exists for.
+- Rotating **placeholder examples** (`placeholderExamples`, served publicly),
+  edited one per line in the builder.
+- Public route `GET /api/hubspot/company-search?q=` (bounded, TTL-cached,
+  4s timeout) for the frontend autocomplete; timeline note gains a company
+  line; submissions store the resolved records (`companies` attribute).
+- Structural guard: a field name colliding with a company field's companion
+  keys (`<name>__siret`, `<name>__company`) is refused; `companyMap` entries
+  are validated against the portal schema like any mapping.
+
 ## 0.10.0 — 2026-08-29
 
 ### Added — HubSpot-parity condition operators

@@ -1,5 +1,6 @@
 import type { Core } from "@strapi/strapi";
 import { runAudit } from "./audit";
+import { searchCompanies } from "./company";
 import contentTypes from "./content-types";
 import {
   createFormsService,
@@ -120,6 +121,14 @@ const controllers = {
   }),
 
   formsAdmin: ({ strapi }: { strapi: Core.Strapi }) => createFormsAdminController(strapi),
+
+  company: () => ({
+    /** SIRENE autocomplete for the company field — bounded, cached upstream. */
+    async search(ctx: { query: { q?: string }; body: unknown }) {
+      const q = typeof ctx.query.q === "string" ? ctx.query.q : "";
+      ctx.body = { companies: await searchCompanies(q) };
+    },
+  }),
 
   submissions: ({ strapi }: { strapi: Core.Strapi }) => ({
     /** Paged submissions, newest first, optionally narrowed to one form. */
@@ -292,6 +301,7 @@ const routes = {
     type: "content-api",
     routes: [
       { method: "GET", path: "/forms/:slug", handler: "forms.findOne", config: { policies: [] } },
+      { method: "GET", path: "/company-search", handler: "company.search", config: { policies: [] } },
       { method: "POST", path: "/forms/:slug/submit", handler: "forms.submit", config: { policies: [] } },
     ],
   },
