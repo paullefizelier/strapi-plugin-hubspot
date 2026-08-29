@@ -11,6 +11,7 @@ import {
   headcountLabelOf,
   nafLabelOf,
   normalizeCompanyHits,
+  normalizeQuery,
   pickSiret,
   type CompanyMap,
   type SearchPayload,
@@ -167,5 +168,21 @@ describe("companyProperties", () => {
     };
     const noExtras = { ...hit, naf: undefined, nafLabel: undefined, headcount: undefined };
     expect(companyProperties(sparse, noExtras)).toEqual({});
+  });
+});
+
+describe("normalizeQuery", () => {
+  it("recognizes a pasted SIRET/SIREN despite spaces, dots and dashes", () => {
+    expect(normalizeQuery(" 798 841 284 00010 ")).toBe("79884128400010");
+    expect(normalizeQuery("798.841.284")).toBe("798841284");
+    expect(normalizeQuery("798-841-284")).toBe("798841284");
+  });
+
+  it("leaves plain text queries untouched (just trimmed)", () => {
+    expect(normalizeQuery("  Actual Leader ")).toBe("Actual Leader");
+    // Digits inside text are not an identifier.
+    expect(normalizeQuery("3M France")).toBe("3M France");
+    // Digit runs that are neither SIREN nor SIRET stay as typed.
+    expect(normalizeQuery("12345")).toBe("12345");
   });
 });
