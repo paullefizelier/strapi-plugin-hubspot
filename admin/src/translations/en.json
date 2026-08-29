@@ -244,5 +244,12 @@
   "submissions.prev": "Previous",
   "submissions.next": "Next",
   "submissions.page": "{page} / {pages}",
-  "submissions.meta-page": "Submitted from"
+  "submissions.meta-page": "Submitted from",
+  "condition.op.in": "is any of",
+  "condition.op.notIn": "is none of",
+  "condition.op.notContains": "doesn't contain",
+  "condition.op.startsWith": "starts with",
+  "condition.op.endsWith": "ends with",
+  "condition.values": "Values",
+  "condition.values-placeholder": "value1, value2…"
 }

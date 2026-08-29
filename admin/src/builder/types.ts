@@ -1,11 +1,25 @@
 /** Client-side mirror of the server's definition types (server/src/conditions.ts). */
 
-export type Operator = "eq" | "neq" | "contains" | "empty" | "notEmpty" | "gt" | "lt";
+export type Operator =
+  | "eq"
+  | "neq"
+  | "contains"
+  | "notContains"
+  | "startsWith"
+  | "endsWith"
+  | "empty"
+  | "notEmpty"
+  | "gt"
+  | "lt"
+  | "in"
+  | "notIn";
 
 export interface Rule {
   field: string;
   operator: Operator;
   value?: string;
+  /** For `in` / `notIn`: the values any one of which satisfies the rule. */
+  values?: string[];
 }
 
 export interface Condition {

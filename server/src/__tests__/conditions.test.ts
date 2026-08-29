@@ -309,3 +309,81 @@ describe("validateDefinition", () => {
     ]);
   });
 });
+
+describe("evaluateCondition — HubSpot-parity operators (0.10.0)", () => {
+  const get = (values: Record<string, unknown>) => (fieldId: string) => values[fieldId];
+
+  it("in matches when the value is any of the listed ones, trimmed", () => {
+    const c = cond("and", { field: "fld_a", operator: "in", values: ["pme", "eti"] });
+    expect(evaluateCondition(c, get({ fld_a: "pme" }))).toBe(true);
+    expect(evaluateCondition(c, get({ fld_a: " eti " }))).toBe(true);
+    expect(evaluateCondition(c, get({ fld_a: "ge" }))).toBe(false);
+    expect(evaluateCondition(c, get({}))).toBe(false);
+  });
+
+  it("notIn is the negation of in, and holds for an absent value", () => {
+    const c = cond("and", { field: "fld_a", operator: "notIn", values: ["pme", "eti"] });
+    expect(evaluateCondition(c, get({ fld_a: "ge" }))).toBe(true);
+    expect(evaluateCondition(c, get({ fld_a: "pme" }))).toBe(false);
+    expect(evaluateCondition(c, get({}))).toBe(true);
+  });
+
+  it("in with an empty list never matches; notIn with an empty list always holds", () => {
+    expect(evaluateCondition(cond("and", { field: "fld_a", operator: "in", values: [] }), get({ fld_a: "x" }))).toBe(false);
+    expect(evaluateCondition(cond("and", { field: "fld_a", operator: "notIn", values: [] }), get({ fld_a: "x" }))).toBe(true);
+  });
+
+  it("notContains is the case-insensitive negation of contains", () => {
+    const c = cond("and", { field: "fld_a", operator: "notContains", value: "Acme" });
+    expect(evaluateCondition(c, get({ fld_a: "groupe ACME sas" }))).toBe(false);
+    expect(evaluateCondition(c, get({ fld_a: "autre" }))).toBe(true);
+    expect(evaluateCondition(c, get({}))).toBe(true);
+  });
+
+  it("startsWith / endsWith compare case-insensitively on trimmed strings", () => {
+    const starts = cond("and", { field: "fld_a", operator: "startsWith", value: "GR" });
+    expect(evaluateCondition(starts, get({ fld_a: " groupe Actual" }))).toBe(true);
+    expect(evaluateCondition(starts, get({ fld_a: "le groupe" }))).toBe(false);
+    expect(evaluateCondition(starts, get({}))).toBe(false);
+
+    const ends = cond("and", { field: "fld_a", operator: "endsWith", value: ".FR" });
+    expect(evaluateCondition(ends, get({ fld_a: "acme.fr" }))).toBe(true);
+    expect(evaluateCondition(ends, get({ fld_a: "acme.com" }))).toBe(false);
+  });
+});
+
+describe("validateDefinition — list operators", () => {
+  it("accepts in/notIn with a non-empty values list", () => {
+    const def = oneStep([
+      field("fld_a", "type"),
+      field("fld_b", "company", {
+        visibleIf: cond("and", { field: "fld_a", operator: "in", values: ["pme"] }),
+      }),
+    ]);
+    expect(validateDefinition(def)).toEqual([]);
+  });
+
+  it("flags in/notIn with no values to compare against", () => {
+    const def = oneStep([
+      field("fld_a", "type"),
+      field("fld_b", "company", {
+        visibleIf: cond("and", { field: "fld_a", operator: "in", values: [] }),
+      }),
+    ]);
+    expect(validateDefinition(def)).toEqual([
+      { code: "missing-value", fieldId: "fld_b", target: "fld_a" },
+    ]);
+  });
+
+  it("startsWith/endsWith/notContains require a value like the other comparators", () => {
+    const def = oneStep([
+      field("fld_a", "type"),
+      field("fld_b", "company", {
+        visibleIf: cond("and", { field: "fld_a", operator: "startsWith" }),
+      }),
+    ]);
+    expect(validateDefinition(def)).toEqual([
+      { code: "missing-value", fieldId: "fld_b", target: "fld_a" },
+    ]);
+  });
+});

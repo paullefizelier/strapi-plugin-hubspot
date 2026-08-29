@@ -8,13 +8,27 @@
  *   POST /api/hubspot/forms/:slug/submit  → SubmitResponse (SubmitRequest in)
  */
 
-export type Operator = "eq" | "neq" | "contains" | "empty" | "notEmpty" | "gt" | "lt";
+export type Operator =
+  | "eq"
+  | "neq"
+  | "contains"
+  | "notContains"
+  | "startsWith"
+  | "endsWith"
+  | "empty"
+  | "notEmpty"
+  | "gt"
+  | "lt"
+  | "in"
+  | "notIn";
 
 export interface Rule {
   /** Stable id (`fld_…`) of the field the rule reads — never its name. */
   field: string;
   operator: Operator;
   value?: string;
+  /** For `in` / `notIn`: the values any one of which satisfies the rule. */
+  values?: string[];
 }
 
 export interface Condition {

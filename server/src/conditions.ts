@@ -4,13 +4,27 @@
 
 export type Primitive = string | number | boolean;
 
-export type Operator = "eq" | "neq" | "contains" | "empty" | "notEmpty" | "gt" | "lt";
+export type Operator =
+  | "eq"
+  | "neq"
+  | "contains"
+  | "notContains"
+  | "startsWith"
+  | "endsWith"
+  | "empty"
+  | "notEmpty"
+  | "gt"
+  | "lt"
+  | "in"
+  | "notIn";
 
 export interface Rule {
   /** Stable id (`fld_…`) of the field the rule reads — never its name. */
   field: string;
   operator: Operator;
   value?: string;
+  /** For `in` / `notIn`: the values any one of which satisfies the rule. */
+  values?: string[];
 }
 
 export interface Condition {
@@ -60,7 +74,18 @@ export type DefinitionError =
   | { code: "missing-value"; fieldId?: string; stepId?: string; target: string };
 
 /** Operators that compare against a value — the others just probe presence. */
-const NEEDS_VALUE: ReadonlySet<Operator> = new Set(["eq", "neq", "contains", "gt", "lt"]);
+const NEEDS_VALUE: ReadonlySet<Operator> = new Set([
+  "eq",
+  "neq",
+  "contains",
+  "notContains",
+  "startsWith",
+  "endsWith",
+  "gt",
+  "lt",
+]);
+/** Operators that compare against a LIST of values. */
+const NEEDS_VALUES: ReadonlySet<Operator> = new Set(["in", "notIn"]);
 
 /**
  * Structural check of a definition — what the builder enforces, re-checked
@@ -86,6 +111,9 @@ export function validateDefinition(definition: FormDefinition): DefinitionError[
         errors.push({ code: "forward-reference", ...owner, target: rule.field });
       }
       if (NEEDS_VALUE.has(rule.operator) && (rule.value === undefined || rule.value === "")) {
+        errors.push({ code: "missing-value", ...owner, target: rule.field });
+      }
+      if (NEEDS_VALUES.has(rule.operator) && !rule.values?.length) {
         errors.push({ code: "missing-value", ...owner, target: rule.field });
       }
     }
@@ -133,6 +161,16 @@ function evaluateRule(rule: Rule, get: (fieldId: string) => unknown): boolean {
       return asString(value) !== asString(rule.value);
     case "contains":
       return asString(value).toLowerCase().includes(asString(rule.value).toLowerCase());
+    case "notContains":
+      return !asString(value).toLowerCase().includes(asString(rule.value).toLowerCase());
+    case "startsWith":
+      return asString(value).toLowerCase().startsWith(asString(rule.value).toLowerCase());
+    case "endsWith":
+      return asString(value).toLowerCase().endsWith(asString(rule.value).toLowerCase());
+    case "in":
+      return (rule.values ?? []).some((v) => asString(v) === asString(value));
+    case "notIn":
+      return !(rule.values ?? []).some((v) => asString(v) === asString(value));
     case "empty":
       return isEmpty(value);
     case "notEmpty":
