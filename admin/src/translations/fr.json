@@ -244,5 +244,12 @@
   "submissions.prev": "Précédent",
   "submissions.next": "Suivant",
   "submissions.page": "{page} / {pages}",
-  "submissions.meta-page": "Envoyée depuis"
+  "submissions.meta-page": "Envoyée depuis",
+  "condition.op.in": "est parmi",
+  "condition.op.notIn": "n'est pas parmi",
+  "condition.op.notContains": "ne contient pas",
+  "condition.op.startsWith": "commence par",
+  "condition.op.endsWith": "finit par",
+  "condition.values": "Valeurs",
+  "condition.values-placeholder": "valeur1, valeur2…"
 }

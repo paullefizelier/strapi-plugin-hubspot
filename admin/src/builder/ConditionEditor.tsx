@@ -5,6 +5,8 @@ import {
   Button,
   Flex,
   IconButton,
+  MultiSelect,
+  MultiSelectOption,
   SingleSelect,
   SingleSelectOption,
   TextInput,
@@ -14,8 +16,32 @@ import { Plus, Trash } from "@strapi/icons";
 import { getTranslation } from "../getTranslation";
 import type { Condition, FormField, Operator, Rule } from "./types";
 
-const OPERATORS: Operator[] = ["eq", "neq", "contains", "empty", "notEmpty", "gt", "lt"];
-const NEEDS_VALUE = new Set<Operator>(["eq", "neq", "contains", "gt", "lt"]);
+const OPERATORS: Operator[] = [
+  "eq",
+  "neq",
+  "in",
+  "notIn",
+  "contains",
+  "notContains",
+  "startsWith",
+  "endsWith",
+  "empty",
+  "notEmpty",
+  "gt",
+  "lt",
+];
+const NEEDS_VALUE = new Set<Operator>([
+  "eq",
+  "neq",
+  "contains",
+  "notContains",
+  "startsWith",
+  "endsWith",
+  "gt",
+  "lt",
+]);
+/** List operators: the value cell becomes a multi-select (or a comma list). */
+const NEEDS_VALUES = new Set<Operator>(["in", "notIn"]);
 
 interface Props {
   /** The condition being edited (null/undefined = always visible). */
@@ -44,6 +70,11 @@ const ConditionEditor = ({ condition, candidates, onChange }: Props) => {
     notEmpty: t("condition.op.notEmpty", "is filled"),
     gt: t("condition.op.gt", "is greater than"),
     lt: t("condition.op.lt", "is less than"),
+    in: t("condition.op.in", "is any of"),
+    notIn: t("condition.op.notIn", "is none of"),
+    notContains: t("condition.op.notContains", "doesn't contain"),
+    startsWith: t("condition.op.startsWith", "starts with"),
+    endsWith: t("condition.op.endsWith", "ends with"),
   };
 
   const rules = condition?.rules ?? [];
@@ -99,7 +130,9 @@ const ConditionEditor = ({ condition, candidates, onChange }: Props) => {
                 <SingleSelect
                   aria-label={t("condition.operator", "Operator")}
                   value={rule.operator}
-                  onChange={(v: string | number) => updateRule(index, { operator: v as Operator })}
+                  onChange={(v: string | number) =>
+                    updateRule(index, { operator: v as Operator, value: "", values: [] })
+                  }
                 >
                   {OPERATORS.map((op) => (
                     <SingleSelectOption key={op} value={op}>
@@ -108,6 +141,38 @@ const ConditionEditor = ({ condition, candidates, onChange }: Props) => {
                   ))}
                 </SingleSelect>
               </Box>
+              {NEEDS_VALUES.has(rule.operator) && (
+                <Box flex="1" minWidth="140px">
+                  {targetOptions.length ? (
+                    <MultiSelect
+                      aria-label={t("condition.values", "Values")}
+                      value={rule.values ?? []}
+                      withTags
+                      onChange={(values: string[]) => updateRule(index, { values })}
+                    >
+                      {targetOptions.map((o) => (
+                        <MultiSelectOption key={o.value} value={o.value}>
+                          {o.label || o.value}
+                        </MultiSelectOption>
+                      ))}
+                    </MultiSelect>
+                  ) : (
+                    <TextInput
+                      // Uncontrolled + commit on blur: splitting on every
+                      // keystroke would eat the comma the user just typed.
+                      key={`${index}-${rule.operator}`}
+                      aria-label={t("condition.values", "Values")}
+                      placeholder={t("condition.values-placeholder", "value1, value2…")}
+                      defaultValue={(rule.values ?? []).join(", ")}
+                      onBlur={(e: React.FocusEvent<HTMLInputElement>) =>
+                        updateRule(index, {
+                          values: e.target.value.split(",").map((v) => v.trim()).filter(Boolean),
+                        })
+                      }
+                    />
+                  )}
+                </Box>
+              )}
               {NEEDS_VALUE.has(rule.operator) && (
                 <Box flex="1" minWidth="110px">
                   {targetOptions.length ? (

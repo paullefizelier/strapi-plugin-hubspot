@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.10.0 — 2026-08-29
+
+### Added — HubSpot-parity condition operators
+- `in` / `notIn` ("is any of" / "is none of"): one rule matching several
+  values — a multi-select over the referenced field's options in the editor
+  (comma-separated input when the field has none). Closes the gap that
+  previously required stacking OR'd `eq` rules.
+- `notContains`, `startsWith`, `endsWith` — case-insensitive, like `contains`.
+- Structural validation flags an `in`/`notIn` rule with no values, like the
+  other comparators; switching operator clears the stale value shape.
+
+Frontends mirroring the engine client-side must add the five operators (the
+typed `Operator` union in `strapi-plugin-hubspot/types` is the reference —
+the server remains the authority at submission either way).
+
 ## 0.9.0 — 2026-08-29
 
 ### Added
