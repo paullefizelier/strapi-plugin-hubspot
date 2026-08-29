@@ -196,15 +196,29 @@ async function query(params: string): Promise<SearchPayload | null> {
   }
 }
 
+/**
+ * A pasted identifier survives its formatting: "798 841 284 00010" queries as
+ * a SIRET, "798.841.284" as a SIREN. Anything else is a plain text query.
+ */
+export function normalizeQuery(q: string): string {
+  const trimmed = q.trim();
+  const digits = trimmed.replace(/[\s.\-]/g, "");
+  return /^\d{9}$/.test(digits) || /^\d{14}$/.test(digits) ? digits : trimmed;
+}
+
 /** Autocomplete search. Bounded, cached; empty on any failure. */
 export async function searchCompanies(q: string): Promise<CompanyHit[]> {
-  const trimmed = q.trim().slice(0, 60);
+  const trimmed = normalizeQuery(q).slice(0, 60);
   if (trimmed.length < 3) return [];
   const key = trimmed.toLowerCase();
   const cached = cache.get(key);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.hits;
 
-  const payload = await query(`q=${encodeURIComponent(trimmed)}&per_page=8`);
+  // Closed structures are excluded at the source, and big groups surface more
+  // of their établissements than the API's default.
+  const payload = await query(
+    `q=${encodeURIComponent(trimmed)}&per_page=8&etat_administratif=A&limite_matching_etablissements=5`,
+  );
   const hits = payload ? normalizeCompanyHits(payload) : [];
   if (payload) cache.set(key, { at: Date.now(), hits });
   return hits;
