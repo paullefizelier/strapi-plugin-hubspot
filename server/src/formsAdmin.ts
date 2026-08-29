@@ -33,6 +33,7 @@ const WRITABLE = [
   "nextLabel",
   "submitLabel",
   "successMessage",
+  "class",
 ] as const;
 
 const slugify = (value: string) =>
@@ -61,6 +62,17 @@ export function createFormsAdminController(strapi: Core.Strapi) {
       return mappingProblems(definition, schema.properties);
     } catch {
       return null;
+    }
+  }
+
+  /** Slug free of clashes: suffixed until unique. Forms are few; the loop is fine. */
+  async function uniqueSlug(name: string): Promise<string> {
+    const base = slugify(name);
+    let slug = base;
+    for (let i = 2; ; i += 1) {
+      const clash = await documents().findFirst({ filters: { slug } } as never);
+      if (!clash) return slug;
+      slug = `${base}-${i}`;
     }
   }
 
@@ -136,14 +148,7 @@ export function createFormsAdminController(strapi: Core.Strapi) {
       const name = typeof body.name === "string" ? body.name.trim() : "";
       if (!name) ctx.throw(400, "A form needs a name");
 
-      // Unique slug: suffix until free. Forms are few; the loop is fine.
-      const base = slugify(name);
-      let slug = base;
-      for (let i = 2; ; i += 1) {
-        const clash = await documents().findFirst({ filters: { slug } } as never);
-        if (!clash) break;
-        slug = `${base}-${i}`;
-      }
+      const slug = await uniqueSlug(name);
 
       let definition: FormDefinition;
       try {
@@ -339,6 +344,66 @@ export function createFormsAdminController(strapi: Core.Strapi) {
 
       if (!targetId) ctx.throw(404, "Source entry not found");
       ctx.body = { documentId: targetId, locales: imported };
+    },
+
+    /**
+     * Copies a form (every locale of its draft) into a new draft document —
+     * the quickest way to A/B a variant or to start from an existing form.
+     * Internal step/field ids are kept: they only need uniqueness per form.
+     */
+    async duplicate(ctx: Ctx) {
+      const sourceId = ctx.params.documentId!;
+      let locales: (string | undefined)[] = [undefined];
+      try {
+        const found = (await strapi
+          .plugin("i18n")
+          .service("locales")
+          .find()) as { code: string; isDefault?: boolean }[];
+        if (Array.isArray(found) && found.length) {
+          locales = [...found]
+            .sort((a, b) => Number(b.isDefault ?? false) - Number(a.isDefault ?? false))
+            .map((l) => l.code);
+        }
+      } catch {
+        /* i18n unavailable — single pass */
+      }
+
+      let targetId: string | null = null;
+      let slug: string | null = null;
+      for (const locale of locales) {
+        const source = (await documents().findOne({
+          documentId: sourceId,
+          locale,
+          status: "draft",
+        } as never)) as unknown as (FormEntry & Record<string, unknown>) | null;
+        if (!source) continue;
+
+        const name = `${source.name} (2)`;
+        slug ??= await uniqueSlug(name);
+        const data = {
+          name,
+          slug,
+          title: source.title,
+          subtitle: source.subtitle,
+          nextLabel: source.nextLabel,
+          submitLabel: source.submitLabel,
+          successMessage: source.successMessage,
+          class: source.class,
+          definition: source.definition,
+        };
+        if (targetId) {
+          const { slug: _slug, name: _name, ...localized } = data;
+          await documents().update({ documentId: targetId, locale, data: localized as never } as never);
+        } else {
+          const created = (await documents().create({
+            locale,
+            data: data as never,
+          } as never)) as unknown as { documentId: string };
+          targetId = created.documentId;
+        }
+      }
+      if (!targetId) ctx.throw(404, "Form not found");
+      ctx.body = { documentId: targetId };
     },
 
     async remove(ctx: Ctx) {

@@ -26,6 +26,7 @@ export interface FormEntry {
   nextLabel?: string | null;
   submitLabel?: string | null;
   successMessage?: string | null;
+  class?: string | null;
   locale?: string | null;
   definition: FormDefinition;
   [key: string]: unknown;
@@ -38,6 +39,7 @@ export interface PublicForm {
   nextLabel?: string | null;
   submitLabel?: string | null;
   successMessage?: string | null;
+  class?: string | null;
   locale?: string | null;
   steps: FormDefinition["steps"];
 }
@@ -51,6 +53,7 @@ export function publicForm(entry: FormEntry): PublicForm {
     nextLabel: entry.nextLabel ?? null,
     submitLabel: entry.submitLabel ?? null,
     successMessage: entry.successMessage ?? null,
+    class: entry.class ?? null,
     locale: entry.locale ?? null,
     steps: (entry.definition?.steps ?? []).map((step) => ({
       ...step,

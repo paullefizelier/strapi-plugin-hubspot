@@ -78,6 +78,17 @@ const FormEditor = () => {
 
   const query = locale ? `?locale=${locale}` : "";
 
+  // Half an hour of conditions must not vanish on a mis-click: warn before
+  // the tab closes or navigates away while changes are unsaved.
+  React.useEffect(() => {
+    if (!dirty) return undefined;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
   React.useEffect(() => {
     get<AdminLocale[]>("/i18n/locales")
       .then(({ data }) => Array.isArray(data) && setLocales(data))
@@ -197,6 +208,7 @@ const FormEditor = () => {
           nextLabel: entry.nextLabel,
           submitLabel: entry.submitLabel,
           successMessage: entry.successMessage,
+          class: entry.class,
           definition,
         },
       );
@@ -354,6 +366,8 @@ const FormEditor = () => {
                 hasRadius
                 shadow="tableShadow"
                 padding={4}
+                onClick={() => setSelection({ kind: "step", stepId: step.id })}
+                style={{ cursor: "pointer" }}
                 borderColor={selection.kind === "step" && selection.stepId === step.id ? "primary600" : undefined}
                 borderStyle={selection.kind === "step" && selection.stepId === step.id ? "solid" : undefined}
                 borderWidth={selection.kind === "step" && selection.stepId === step.id ? "1px" : undefined}
@@ -380,7 +394,7 @@ const FormEditor = () => {
                       </Badge>
                     )}
                   </Flex>
-                  <Flex gap={1}>
+                  <Flex gap={1} onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                     <IconButton
                       label={t("editor.step-up", "Move the step up")}
                       onClick={() => moveStep(stepIndex, -1)}
@@ -417,7 +431,10 @@ const FormEditor = () => {
                         background={isSelected ? "primary100" : "neutral100"}
                         hasRadius
                         padding={3}
-                        onClick={() => setSelection({ kind: "field", fieldId: field.id })}
+                        onClick={(e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          setSelection({ kind: "field", fieldId: field.id });
+                        }}
                         style={{ cursor: "pointer" }}
                       >
                         <Flex justifyContent="space-between" alignItems="center">
@@ -482,7 +499,8 @@ const FormEditor = () => {
                   <Button
                     variant="tertiary"
                     startIcon={<Plus />}
-                    onClick={() => {
+                    onClick={(e: React.MouseEvent) => {
+                      e.stopPropagation();
                       const field = newField(t("editor.new-field", "New field"));
                       patchStep(step.id, { fields: [...step.fields, field] });
                       setSelection({ kind: "field", fieldId: field.id });
@@ -537,6 +555,15 @@ const FormEditor = () => {
                   value={selectedStep.description ?? ""}
                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                     patchStep(selectedStep.id, { description: e.target.value })
+                  }
+                />
+              </Field.Root>
+              <Field.Root>
+                <Field.Label>{t("panel.class", "CSS classes")}</Field.Label>
+                <TextInput
+                  value={selectedStep.class ?? ""}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    patchStep(selectedStep.id, { class: e.target.value })
                   }
                 />
               </Field.Root>
@@ -607,6 +634,15 @@ const FormEditor = () => {
                   value={entry.successMessage ?? ""}
                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                     patchEntry({ successMessage: e.target.value })
+                  }
+                />
+              </Field.Root>
+              <Field.Root>
+                <Field.Label>{t("panel.class", "CSS classes")}</Field.Label>
+                <TextInput
+                  value={entry.class ?? ""}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    patchEntry({ class: e.target.value })
                   }
                 />
               </Field.Root>

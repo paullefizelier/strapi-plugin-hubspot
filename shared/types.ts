@@ -72,6 +72,8 @@ export interface PublicForm {
   nextLabel?: string | null;
   submitLabel?: string | null;
   successMessage?: string | null;
+  /** Extra utility classes on the form wrapper, for the host frontend. */
+  class?: string | null;
   locale?: string | null;
   steps: PublicFormStep[];
 }

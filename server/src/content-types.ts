@@ -53,6 +53,7 @@ export default {
         nextLabel: localizedString(),
         submitLabel: localizedString(),
         successMessage: localizedString("text"),
+        class: { type: "string" },
         definition: {
           type: "json",
           required: true,

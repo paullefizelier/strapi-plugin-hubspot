@@ -54,6 +54,7 @@ describe("publicForm", () => {
     nextLabel: "Suivant",
     submitLabel: "Envoyer",
     successMessage: "Merci !",
+    class: "form--hero",
     locale: "fr",
     definition,
   };
@@ -62,6 +63,7 @@ describe("publicForm", () => {
     const out = publicForm(entry);
     expect(out.slug).toBe("qualification-b2b");
     expect(out.title).toBe("Parlons-en");
+    expect(out.class).toBe("form--hero");
     expect(out.steps).toHaveLength(2);
     expect(out.steps[1].visibleIf).toEqual(definition.steps[1].visibleIf);
     expect(out.steps[0].fields[1]).toMatchObject({

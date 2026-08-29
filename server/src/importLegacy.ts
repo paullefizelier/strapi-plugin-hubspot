@@ -40,6 +40,7 @@ export interface ConvertedForm {
   nextLabel?: string | null;
   submitLabel?: string | null;
   successMessage?: string | null;
+  class?: string | null;
   definition: FormDefinition;
 }
 
@@ -125,6 +126,7 @@ export function convertLegacyForm(
     nextLabel: (entry.nextLabel as string) ?? null,
     submitLabel: (entry.submitLabel as string) ?? null,
     successMessage: (entry.successMessage as string) ?? null,
+    class: (entry.class as string) ?? null,
     definition: { version: 1, steps },
   };
 }

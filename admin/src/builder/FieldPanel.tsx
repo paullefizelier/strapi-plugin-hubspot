@@ -157,6 +157,45 @@ const FieldPanel = ({ field, candidates, problem, onChange }: Props) => {
         {t("panel.required", "Required")}
       </Checkbox>
 
+      <Flex gap={4}>
+        <Box flex="1">
+          <Field.Root>
+            <Field.Label>{t("panel.icon", "Icon")}</Field.Label>
+            <TextInput
+              value={(field.icon as string) ?? ""}
+              placeholder="i-lucide-building-2"
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ icon: e.target.value })}
+            />
+          </Field.Root>
+        </Box>
+        <Box flex="1">
+          <Field.Root>
+            <Field.Label>{t("panel.persist", "Answer memory")}</Field.Label>
+            <SingleSelect
+              value={(field.persist as string) ?? "session"}
+              onChange={(v: string | number) =>
+                onChange({ persist: v as "session" | "days30" })
+              }
+            >
+              <SingleSelectOption value="session">
+                {t("panel.persist-session", "This visit only")}
+              </SingleSelectOption>
+              <SingleSelectOption value="days30">
+                {t("panel.persist-days30", "30 days (non-identifying fields only)")}
+              </SingleSelectOption>
+            </SingleSelect>
+          </Field.Root>
+        </Box>
+      </Flex>
+
+      <Field.Root>
+        <Field.Label>{t("panel.class", "CSS classes")}</Field.Label>
+        <TextInput
+          value={(field.class as string) ?? ""}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ class: e.target.value })}
+        />
+      </Field.Root>
+
       {isChoice && (
         <Flex direction="column" alignItems="stretch" gap={2}>
           <Typography variant="sigma" textColor="neutral600">

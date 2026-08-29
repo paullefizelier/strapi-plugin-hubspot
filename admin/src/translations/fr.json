@@ -92,8 +92,8 @@
   "forms.col-structure": "Structure",
   "forms.col-status": "Statut",
   "forms.col-updated": "Modifié",
-  "forms.col-actions": "",
-  "forms.structure": "{steps} étapes · {fields} champs",
+  "forms.col-actions": "Actions",
+  "forms.structure": "{steps, plural, one {# étape} other {# étapes}} · {fields, plural, one {# champ} other {# champs}}",
   "forms.published": "Publié",
   "forms.draft": "Brouillon",
   "forms.delete": "Supprimer",
@@ -197,5 +197,12 @@
   "form-picker.placeholder": "Choisir un formulaire…",
   "form-picker.fallback": "Slug du formulaire",
   "form-picker.orphan": "{slug} — formulaire inconnu",
-  "form-picker.draft": "{name} ({slug}) — brouillon, pas encore servi"
+  "form-picker.draft": "{name} ({slug}) — brouillon, pas encore servi",
+  "forms.duplicate": "Dupliquer",
+  "forms.duplicate-error": "Impossible de dupliquer le formulaire.",
+  "panel.icon": "Icône",
+  "panel.persist": "Mémoire de la réponse",
+  "panel.persist-session": "Cette visite seulement",
+  "panel.persist-days30": "30 jours (champs non identifiants uniquement)",
+  "panel.class": "Classes CSS"
 }
