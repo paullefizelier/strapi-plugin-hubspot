@@ -213,6 +213,34 @@ export function createFormsAdminController(strapi: Core.Strapi) {
       ctx.body = { ok: true };
     },
 
+    /**
+     * Feeds the `hubspot.form-picker` custom field: every form of the builder
+     * as { name, slug, published }. Open to any authenticated admin — like the
+     * properties route — because editors pick forms from the Content Manager,
+     * not from the builder. `name`/`slug` are shared across locales.
+     */
+    async options(ctx: Ctx) {
+      const drafts = (await documents().findMany({
+        fields: ["name", "slug"],
+        sort: "name:asc",
+        status: "draft",
+      } as never)) as unknown as { name?: string; slug?: string }[];
+      const published = (await documents().findMany({
+        fields: ["slug"],
+        status: "published",
+      } as never)) as unknown as { slug?: string }[];
+      const publishedSlugs = new Set(published.map((e) => e.slug));
+      ctx.body = {
+        forms: drafts
+          .filter((e) => e.slug)
+          .map((e) => ({
+            name: e.name ?? e.slug,
+            slug: e.slug,
+            published: publishedSlugs.has(e.slug),
+          })),
+      };
+    },
+
     /** Entries of the configured legacy content type, offered for import. */
     async listSources(ctx: Ctx) {
       const config = (strapi.plugin("hubspot").config("forms", {}) as {

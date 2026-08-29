@@ -115,6 +115,23 @@ export default {
       },
     });
 
+    app.customFields.register({
+      name: "form-picker",
+      pluginId: PLUGIN_ID,
+      type: "string",
+      intlLabel: {
+        id: `${PLUGIN_ID}.form-picker.label`,
+        defaultMessage: "HubSpot form",
+      },
+      intlDescription: {
+        id: `${PLUGIN_ID}.form-picker.description`,
+        defaultMessage: "A form built in the HubSpot form builder, stored by slug",
+      },
+      components: {
+        Input: async () => import("./components/HubspotFormInput"),
+      },
+    });
+
     app.createSettingSection(
       {
         id: PLUGIN_ID,

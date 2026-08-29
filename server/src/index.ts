@@ -219,6 +219,9 @@ const routes = {
       adminRoute("POST", "/builder/forms/:documentId/publish", "formsAdmin.publish", [FORMS_ACTION]),
       adminRoute("POST", "/builder/forms/:documentId/unpublish", "formsAdmin.unpublish", [FORMS_ACTION]),
       adminRoute("DELETE", "/builder/forms/:documentId", "formsAdmin.remove", [FORMS_ACTION]),
+      // No FORMS_ACTION: editors pick forms from the Content Manager, like
+      // they pick properties — the builder itself stays gated.
+      adminRoute("GET", "/forms-options", "formsAdmin.options"),
       adminRoute("GET", "/builder/import/sources", "formsAdmin.listSources", [FORMS_ACTION]),
       adminRoute("POST", "/builder/import", "formsAdmin.runImport", [FORMS_ACTION]),
     ],
@@ -256,6 +259,13 @@ export default {
     });
     strapi.customFields.register({
       name: "object",
+      plugin: "hubspot",
+      type: "string",
+    });
+    // A form built in the builder, referenced from host content (a hero block,
+    // a landing…) by its slug — a plain string, so uninstalling degrades safely.
+    strapi.customFields.register({
+      name: "form-picker",
       plugin: "hubspot",
       type: "string",
     });

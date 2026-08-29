@@ -190,5 +190,12 @@
   "forms.import-hint": "Converts a legacy content-type form (all locales) into a draft here — same slug, source untouched. Re-importing overwrites the draft.",
   "forms.import-source": "Form to import",
   "forms.import": "Import",
-  "forms.import-error": "Could not import the form."
+  "forms.import-error": "Could not import the form.",
+  "form-picker.label": "HubSpot form",
+  "form-picker.description": "A form built in the HubSpot form builder, stored by slug",
+  "form-picker.loading": "Loading the forms…",
+  "form-picker.placeholder": "Choose a form…",
+  "form-picker.fallback": "Form slug",
+  "form-picker.orphan": "{slug} — unknown form",
+  "form-picker.draft": "{name} ({slug}) — draft, not served yet"
 }

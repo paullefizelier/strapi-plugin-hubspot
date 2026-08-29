@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.0 — 2026-08-29
+
+### Added
+- `hubspot.form-picker` custom field: a searchable select over the forms
+  built in the builder, storing the chosen form's **slug** as a plain string —
+  for host content that references a form (a hero block, a landing…).
+  Unpublished forms stay selectable but are flagged; a slug whose form was
+  deleted is kept and flagged instead of silently dropped; a fetch failure
+  degrades to free text. Fed by `GET /hubspot/forms-options`, open to any
+  authenticated admin (the builder itself stays RBAC-gated).
+
+### Fixed
+- Removed an accidental self-dependency (`strapi-plugin-hubspot` listed in its
+  own `dependencies`) introduced by a stray `npm install`.
+
 ## 0.6.1 — 2026-08-28
 
 ### Fixed

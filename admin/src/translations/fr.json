@@ -190,5 +190,12 @@
   "forms.import-hint": "Convertit un formulaire du content type historique (toutes locales) en brouillon ici — même slug, source intacte. Ré-importer écrase le brouillon.",
   "forms.import-source": "Formulaire à importer",
   "forms.import": "Importer",
-  "forms.import-error": "Impossible d'importer le formulaire."
+  "forms.import-error": "Impossible d'importer le formulaire.",
+  "form-picker.label": "Formulaire HubSpot",
+  "form-picker.description": "Un formulaire construit dans le form builder HubSpot, stocké par slug",
+  "form-picker.loading": "Chargement des formulaires…",
+  "form-picker.placeholder": "Choisir un formulaire…",
+  "form-picker.fallback": "Slug du formulaire",
+  "form-picker.orphan": "{slug} — formulaire inconnu",
+  "form-picker.draft": "{name} ({slug}) — brouillon, pas encore servi"
 }
