@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.9.0 — 2026-08-29
+
+### Added
+- **Import from HubSpot**: forms built in HubSpot (marketing v3 Forms API,
+  `forms` read scope) can be translated into builder drafts — fields, options,
+  two-per-row layouts and dependent-field conditions carried over, with a
+  **CRM mapping that is valid on arrival** since a HubSpot form field is a CRM
+  property. What the builder can't express (file uploads, hidden fields,
+  content blocks, GDPR consent, exotic operators) is skipped and **reported**
+  after the import instead of silently dropped. Re-importing overwrites the
+  draft; the HubSpot original is never touched.
+- **Submissions browser**: a Submissions page in the admin (button on the
+  forms list + per-form counts in the table) — newest first, filterable by
+  form, sync state at a glance, full answers in a modal, and a per-form
+  **CSV export** whose columns follow the field order of the form (historical
+  keys appended, never dropped).
+- Admin routes: `GET/POST /hubspot/builder/import/hubspot`,
+  `GET /hubspot/builder/submissions`, `GET /hubspot/builder/submissions/export`
+  (all RBAC-gated by `plugin::hubspot.forms`); the forms list now carries a
+  `submissions` count per row.
+
 ## 0.8.0 — 2026-08-29
 
 ### Improved (builder UX pass, from a live session)

@@ -66,6 +66,16 @@ Every submission is stored in **HubSpot form submissions** (Content Manager),
 synced or not, with the CRM ids when the sync succeeded — the source of truth
 lives in your database, not in HubSpot's availability.
 
+### Browsing submissions
+
+The **Submissions** button on the forms list (also reachable from a form's
+count in the table) opens the submissions browser: every stored answer,
+newest first, filterable by form, with the sync state at a glance and the
+full answer set one click away. **Export CSV** downloads one form's whole
+history — columns follow the form's field order, and keys found only in older
+submissions (a renamed or removed field) are appended rather than dropped.
+Deleting stays in the Content Manager, where the type remains visible.
+
 Typed payloads for your frontend:
 
 ```ts
@@ -98,6 +108,24 @@ entry — every locale — into a builder draft with the same slug. The source i
 never modified, re-importing overwrites the draft only, and unpublishing rolls
 a migrated form back. Migrate form by form; the validation middleware keeps
 protecting the ones that stay.
+
+### Importing forms from HubSpot
+
+Forms built **in HubSpot itself** can be imported too — give the private app
+token the `forms` read scope and the list page offers every regular form of
+the portal. The translation carries over what the builder can express:
+
+- fields, labels, placeholders, help texts, required flags and options —
+  and since a HubSpot form field *is* a CRM property, the imported form
+  arrives with a **mapping that is already valid** for the portal;
+- two-fields-per-row layouts become two half-width fields;
+- dependent fields become `visibleIf` conditions (value lists are expanded
+  into OR'd/AND'd rules).
+
+Everything else — file uploads, hidden fields, content blocks, GDPR consent
+blocks, an operator with no equivalent — is **skipped and reported** after the
+import, so nothing is silently half-migrated. The HubSpot original is never
+modified; re-importing overwrites the draft, never the published version.
 
 ### i18n and publishing
 
