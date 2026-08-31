@@ -342,6 +342,24 @@ authenticated admin, since the picker needs it in the Content Manager.
 > reaches the browser, but treat it like any other secret in your database. Use
 > `HUBSPOT_API_KEY` if your deployment already manages secrets properly.
 
+## Stability & versioning
+
+From 1.0 onward this plugin follows semver against a **frozen public
+contract**, enforced by a dedicated test suite (`contract.test.ts`):
+
+- the **definition document** (`version: 1`): steps → fields → `visibleIf`
+  conditions, the 12 operators, stable `stp_`/`fld_` ids;
+- the **public API payloads**: `GET /forms/:slug` (rendering props served,
+  CRM mappings never), `POST /forms/:slug/submit` and its structured 422,
+  `GET /company-search`;
+- the **submission conventions**: values keyed by field `name`, company
+  companion keys `<name>__siret` / `<name>__company`, honeypot `__hp`;
+- the exported types (`strapi-plugin-hubspot/types`).
+
+Anything else — admin UI, internals, HubSpot plumbing — may improve in minor
+versions. Breaking any of the above means a major version, and a `version: 2`
+definition would ship with an automatic migration from `version: 1`.
+
 ## Install
 
 ```bash

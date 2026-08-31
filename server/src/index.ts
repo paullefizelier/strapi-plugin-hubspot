@@ -12,6 +12,7 @@ import {
 } from "./forms";
 import { createFormsAdminController, FORM_UID } from "./formsAdmin";
 import { loadSchema, resolveObjects } from "./properties";
+import { createLimiter } from "./rateLimit";
 import { publicSettings, resolveApiKey, setStoredSettings } from "./settings";
 import { fieldOrder, submissionsCsv, type SubmissionRow } from "./submissions";
 import { createSubmitService, FAILURE_UID } from "./submit";
@@ -49,7 +50,12 @@ const config = {
     //  - companyFromDomain: a corporate email upserts the Company (deduped by
     //    domain) and associates it to the contact;
     //  - timelineNote: a note recaps the submission on the contact's timeline.
-    forms: { companyFromDomain: true, timelineNote: true },
+    forms: {
+      companyFromDomain: true,
+      timelineNote: true,
+      // Per-IP brakes on the public routes; 0 disables one.
+      rateLimit: { submitPerMinute: 6, searchPerMinute: 30 },
+    },
   },
   validator(cfg: { validate?: unknown }) {
     if (cfg.validate && !Array.isArray(cfg.validate)) {
@@ -122,13 +128,30 @@ const controllers = {
 
   formsAdmin: ({ strapi }: { strapi: Core.Strapi }) => createFormsAdminController(strapi),
 
-  company: () => ({
-    /** SIRENE autocomplete for the company field — bounded, cached upstream. */
-    async search(ctx: { query: { q?: string }; body: unknown }) {
-      const q = typeof ctx.query.q === "string" ? ctx.query.q : "";
-      ctx.body = { companies: await searchCompanies(q) };
-    },
-  }),
+  company: ({ strapi }: { strapi: Core.Strapi }) => {
+    const limits = strapi
+      .plugin("hubspot")
+      .config("forms", {}) as { rateLimit?: { searchPerMinute?: number } };
+    const limiter = createLimiter({
+      windowMs: 60_000,
+      max: limits.rateLimit?.searchPerMinute ?? 30,
+    });
+    return {
+      /** SIRENE autocomplete for the company field — bounded, cached upstream. */
+      async search(ctx: {
+        query: { q?: string };
+        request: { ip?: string };
+        body: unknown;
+        throw: (s: number, m: string) => never;
+      }) {
+        if (!limiter.allow(ctx.request.ip ?? "unknown")) {
+          ctx.throw(429, "Too many searches — slow down.");
+        }
+        const q = typeof ctx.query.q === "string" ? ctx.query.q : "";
+        ctx.body = { companies: await searchCompanies(q) };
+      },
+    };
+  },
 
   submissions: ({ strapi }: { strapi: Core.Strapi }) => ({
     /** Paged submissions, newest first, optionally narrowed to one form. */
@@ -182,7 +205,15 @@ const controllers = {
     },
   }),
 
-  forms: ({ strapi }: { strapi: Core.Strapi }) => ({
+  forms: ({ strapi }: { strapi: Core.Strapi }) => {
+    const limits = strapi
+      .plugin("hubspot")
+      .config("forms", {}) as { rateLimit?: { submitPerMinute?: number } };
+    const submitLimiter = createLimiter({
+      windowMs: 60_000,
+      max: limits.rateLimit?.submitPerMinute ?? 6,
+    });
+    return {
     /** Published form for the host frontend — CRM mapping stripped. */
     async findOne(ctx: {
       params: { slug: string };
@@ -213,6 +244,9 @@ const controllers = {
       } as never)) as unknown as FormEntry | null;
       if (!entry?.definition) ctx.throw(404, "Form not found");
 
+      if (!submitLimiter.allow((ctx as unknown as { request: { ip?: string } }).request.ip ?? "unknown")) {
+        ctx.throw(429, "Too many submissions — try again in a minute.");
+      }
       const values = sanitizeRawValues(ctx.request.body?.values);
       if (!values || !Object.keys(values).length) ctx.throw(422, "Invalid submission");
 
@@ -232,7 +266,8 @@ const controllers = {
       }
       ctx.body = { ok: true, hubspotSynced: outcome.hubspotSynced };
     },
-  }),
+    };
+  },
 
   settings: ({ strapi }: { strapi: Core.Strapi }) => ({
     async get(ctx: { body: unknown }) {

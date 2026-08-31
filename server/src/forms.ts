@@ -474,6 +474,14 @@ export function createFormsService(
     rawValues: Record<string, unknown>,
     meta: SubmitMeta = {},
   ): Promise<SubmitOutcome> {
+    // Honeypot: a hidden `__hp` key no human ever sees. A bot that filled it
+    // gets a perfectly normal success — no signal to adapt to — and nothing
+    // is sent or stored.
+    const hp = rawValues.__hp;
+    if (typeof hp === "string" && hp.trim() !== "") {
+      return { ok: true, hubspotSynced: false };
+    }
+
     const resolution = resolveSubmission(form.definition, rawValues);
     if (resolution.missingRequired.length) {
       return { ok: false, missingRequired: resolution.missingRequired };

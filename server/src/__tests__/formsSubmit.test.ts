@@ -571,3 +571,32 @@ describe("forms.submit — company field", () => {
     expect(JSON.stringify(search?.body)).not.toContain("acme.com");
   });
 });
+
+describe("forms.submit — honeypot", () => {
+  it("a filled honeypot pretends success and stores nothing", async () => {
+    const { calls } = mockFetch();
+    const { strapi, rows } = makeStrapi();
+    const out = await service(strapi).submit(
+      formEntry,
+      { email: "bot@spam.io", firstname: "Bot", __hp: "gotcha" },
+      meta,
+    );
+    // The bot sees a normal success — no signal to adapt to…
+    expect(out).toMatchObject({ ok: true, hubspotSynced: false });
+    // …while nothing was sent and nothing was stored.
+    expect(calls.filter((c) => c.path.includes("upsert"))).toHaveLength(0);
+    expect(rows[SUBMISSION_UID] ?? []).toHaveLength(0);
+  });
+
+  it("an empty honeypot key changes nothing for humans", async () => {
+    mockFetch();
+    const { strapi, rows } = makeStrapi();
+    const out = await service(strapi).submit(
+      formEntry,
+      { email: "jane@gmail.com", __hp: "" },
+      meta,
+    );
+    expect(out).toMatchObject({ ok: true, hubspotSynced: true });
+    expect(rows[SUBMISSION_UID]).toHaveLength(1);
+  });
+});
