@@ -15,9 +15,10 @@ import {
   TextInput,
   Typography,
 } from "@strapi/design-system";
-import { ArrowDown, ArrowLeft, ArrowUp, Plus, Trash } from "@strapi/icons";
+import { ArrowDown, ArrowLeft, ArrowUp, Drag, Plus, Trash } from "@strapi/icons";
 import { useFetchClient } from "@strapi/strapi/admin";
 import ConditionEditor from "../builder/ConditionEditor";
+import { SortableItem, SortableList } from "../builder/Sortable";
 import FieldPanel from "../builder/FieldPanel";
 import {
   fieldsBefore,
@@ -183,6 +184,12 @@ const FormEditor = () => {
       }
       return next;
     });
+
+  /** Items re-sequenced to follow a drag's id order (unknown ids dropped). */
+  function reorderByIds<T extends { id: string }>(items: T[], ids: string[]): T[] {
+    const byId = new Map(items.map((item) => [item.id, item]));
+    return ids.map((id) => byId.get(id)).filter((item): item is T => Boolean(item));
+  }
 
   const moveStep = (stepIndex: number, delta: -1 | 1) =>
     patchDefinition((steps) => {
@@ -359,9 +366,17 @@ const FormEditor = () => {
         {/* Canvas */}
         <Box flex="1">
           <Flex direction="column" alignItems="stretch" gap={4}>
+            <SortableList
+              ids={definition.steps.map((s) => s.id)}
+              onReorder={(ids) => patchDefinition((steps) => reorderByIds(steps, ids))}
+            >
             {definition.steps.map((step, stepIndex) => (
-              <Box
+              <SortableItem
                 key={step.id}
+                id={step.id}
+              >
+              {(stepHandle) => (
+              <Box
                 background="neutral0"
                 hasRadius
                 shadow="tableShadow"
@@ -379,6 +394,15 @@ const FormEditor = () => {
                     onClick={() => setSelection({ kind: "step", stepId: step.id })}
                     style={{ cursor: "pointer" }}
                   >
+                    <span
+                      {...stepHandle.attributes}
+                      {...stepHandle.listeners}
+                      onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                      style={{ cursor: "grab", display: "inline-flex", color: "inherit" }}
+                      aria-label={t("editor.drag-step", "Drag to reorder the step")}
+                    >
+                      <Drag />
+                    </span>
                     <Typography variant="delta">
                       {t("editor.step", "Step {n}", { n: stepIndex + 1 })}
                       {step.title ? ` — ${step.title}` : ""}
@@ -422,12 +446,20 @@ const FormEditor = () => {
                 </Flex>
 
                 <Flex direction="column" alignItems="stretch" gap={2}>
+                  <SortableList
+                    ids={step.fields.map((f) => f.id)}
+                    onReorder={(ids) => patchStep(step.id, { fields: reorderByIds(step.fields, ids) })}
+                  >
                   {step.fields.map((field, fieldIndex) => {
                     const flags = fieldFlags(field.id);
                     const isSelected = selection.kind === "field" && selection.fieldId === field.id;
                     return (
-                      <Box
+                      <SortableItem
                         key={field.id}
+                        id={field.id}
+                      >
+                      {(fieldHandle) => (
+                      <Box
                         background={isSelected ? "primary100" : "neutral100"}
                         hasRadius
                         padding={3}
@@ -439,6 +471,15 @@ const FormEditor = () => {
                       >
                         <Flex justifyContent="space-between" alignItems="center">
                           <Flex gap={2} alignItems="center" wrap="wrap">
+                            <span
+                              {...fieldHandle.attributes}
+                              {...fieldHandle.listeners}
+                              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                              style={{ cursor: "grab", display: "inline-flex" }}
+                              aria-label={t("editor.drag-field", "Drag to reorder the field")}
+                            >
+                              <Drag />
+                            </span>
                             <Typography fontWeight="semiBold">{field.label || field.name || "—"}</Typography>
                             <Badge>{field.type}</Badge>
                             {field.required && (
@@ -494,8 +535,11 @@ const FormEditor = () => {
                           </Flex>
                         </Flex>
                       </Box>
+                      )}
+                      </SortableItem>
                     );
                   })}
+                  </SortableList>
                   <Button
                     variant="tertiary"
                     startIcon={<Plus />}
@@ -510,7 +554,10 @@ const FormEditor = () => {
                   </Button>
                 </Flex>
               </Box>
+              )}
+              </SortableItem>
             ))}
+            </SortableList>
 
             <Button
               variant="secondary"
