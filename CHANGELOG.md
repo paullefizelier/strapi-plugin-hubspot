@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.12.0 — 2026-08-31
+
+Road-to-1.0: the public routes get brakes, the contract gets frozen.
+
+### Added
+- **Per-IP rate limiting** on the public routes (sliding window, in-memory):
+  submissions 6/min, company searches 30/min — `forms.rateLimit`
+  config, `0` disables one. Over the limit → `429`.
+- **Honeypot**: a submission whose hidden `__hp` key is filled gets a normal
+  success and is neither sent nor stored — no signal for the bot to adapt to.
+  (Frontends: render a visually hidden `__hp` input.)
+- **Contract test suite** freezing the 1.0 public surface: public form
+  payload keys, CRM mappings never leaked, submission conventions
+  (`__siret`/`__company`/`__hp`, structured `missingRequired`), the 12
+  condition operators. A failure there means "bump the major".
+- README: *Stability & versioning* section documenting the frozen contract
+  and the `version: 2` migration promise.
+
 ## 0.11.1 — 2026-08-29
 
 Ships the company-search sharpening that missed the 0.11.0 tarball (the
