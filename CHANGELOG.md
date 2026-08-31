@@ -1,10 +1,15 @@
 # Changelog
 
-## 0.12.0 — 2026-08-31
-
-Road-to-1.0: the public routes get brakes, the contract gets frozen.
+## 0.13.0 — 2026-08-31
 
 ### Added
+- **Drag & drop in the builder** (@dnd-kit): steps reorder among themselves,
+  fields reorder within their step — grab the grip handle; an 8px activation
+  distance keeps plain clicks selecting as before. The arrow buttons stay:
+  they remain the accessible path and the way to slide a field into the
+  neighbouring step.
+
+### Also in this release — anti-spam & frozen contract
 - **Per-IP rate limiting** on the public routes (sliding window, in-memory):
   submissions 6/min, company searches 30/min — `forms.rateLimit`
   config, `0` disables one. Over the limit → `429`.

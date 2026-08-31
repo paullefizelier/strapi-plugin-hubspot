@@ -267,5 +267,7 @@
   "company.datum.headquarters": "Is headquarters",
   "company.datum.naf": "NAF code",
   "company.datum.nafLabel": "NAF label",
-  "company.datum.headcount": "Headcount range"
+  "company.datum.headcount": "Headcount range",
+  "editor.drag-step": "Drag to reorder the step",
+  "editor.drag-field": "Drag to reorder the field"
 }
