@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.0 — 2026-08-31
+
+### Added
+- **Drag & drop in the builder** (@dnd-kit): steps reorder among themselves,
+  fields reorder within their step — grab the grip handle; an 8px activation
+  distance keeps plain clicks selecting as before. The arrow buttons stay:
+  they remain the accessible path and the way to slide a field into the
+  neighbouring step.
+
 ## 0.11.1 — 2026-08-29
 
 Ships the company-search sharpening that missed the 0.11.0 tarball (the

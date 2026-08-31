@@ -267,5 +267,7 @@
   "company.datum.headquarters": "Est le siège",
   "company.datum.naf": "Code NAF",
   "company.datum.nafLabel": "Libellé NAF",
-  "company.datum.headcount": "Tranche d'effectif"
+  "company.datum.headcount": "Tranche d'effectif",
+  "editor.drag-step": "Glisser pour réordonner l'étape",
+  "editor.drag-field": "Glisser pour réordonner le champ"
 }
