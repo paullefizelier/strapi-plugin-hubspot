@@ -66,6 +66,33 @@ Every submission is stored in **HubSpot form submissions** (Content Manager),
 synced or not, with the CRM ids when the sync succeeded — the source of truth
 lives in your database, not in HubSpot's availability.
 
+### GDPR consent
+
+HubSpot's native *legal consent* block is **not** a CRM field. Importing a
+HubSpot form skips it (you'll see "rebuild it as a field") because this
+builder maps answers onto Contact/Company properties, and an unknown property
+makes HubSpot reject the whole upsert.
+
+To connect consent so the CRM and Strapi both keep a proof:
+
+1. **In HubSpot** (Settings → Properties → Contact), create a checkbox
+   property, e.g. `rgpd_consent`. Optionally a datetime `rgpd_consented_at`.
+2. **In the form builder** (Admin → HubSpot Forms), last step: add a
+   **Checkbox**, name it `consent` (that name is what the site recognizes —
+   it will not inject a second box), mark it **required**.
+3. **Map it**: Object = Contact, property = `rgpd_consent`. The visitor's tick
+   then lands on the contact. Leave `consentedAt` unmapped; the frontend
+   sends it in `meta.consentedAt`, stored on the submission and on the
+   timeline note.
+4. **Publish** the form. The public submit pipeline already refuses a payload
+   without consent when the site is in front (Nuxt BFF). Direct calls to
+   `/api/hubspot/forms/:slug/submit` still accept a form that has no consent
+   field — add the checkbox so required-field validation covers them too.
+
+The newsletter block on the site is **not** a HubSpot form: it upserts the
+email as a contact and writes a timeline note with the consent timestamp.
+No form to create in the builder for that one.
+
 ### Browsing submissions
 
 The **Submissions** button on the forms list (also reachable from a form's

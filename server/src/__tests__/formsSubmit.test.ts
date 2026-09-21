@@ -238,6 +238,21 @@ describe("forms.submit", () => {
     expect(row.values).toEqual({ email: "jane@gmail.com", firstname: "Jane", role: "dev" });
   });
 
+  it("records GDPR consent on the submission and the HubSpot note", async () => {
+    const { calls } = mockFetch();
+    const { strapi, rows } = makeStrapi();
+    await service(strapi).submit(
+      formEntry,
+      { email: "jane@gmail.com", firstname: "Jane" },
+      { ...meta, consent: true, consentedAt: "2026-09-21T13:00:00.000Z" },
+    );
+    const row = rows[SUBMISSION_UID][0];
+    expect(row.meta).toMatchObject({ consent: true, consentedAt: "2026-09-21T13:00:00.000Z" });
+    const note = calls.find((c) => c.path.endsWith("/objects/notes"));
+    expect(JSON.stringify(note?.body)).toContain("Consentement RGPD");
+    expect(JSON.stringify(note?.body)).toContain("2026-09-21T13:00:00.000Z");
+  });
+
   it("discards the value of a condition-hidden field — not sent, not stored", async () => {
     const { calls } = mockFetch();
     const { strapi, rows } = makeStrapi();

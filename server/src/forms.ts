@@ -424,6 +424,12 @@ export function createFormsService(
       const path = opts.meta.originPath ? ` (${escapeHtml(String(opts.meta.originPath))})` : "";
       lines.push(`<strong>Sujet</strong> : ${escapeHtml(String(opts.meta.originLabel))}${path}`);
     }
+    if (opts.meta.consent === true) {
+      const when = typeof opts.meta.consentedAt === "string" && opts.meta.consentedAt
+        ? ` (${escapeHtml(opts.meta.consentedAt)})`
+        : "";
+      lines.push(`<strong>Consentement RGPD</strong> : oui${when}`);
+    }
     for (const record of opts.companies ?? []) {
       if (!record.name && !record.siret) continue;
       const bits = [record.name, record.siret ? `SIRET ${record.siret}` : ""].filter(Boolean);

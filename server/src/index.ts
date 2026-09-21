@@ -251,11 +251,17 @@ const controllers = {
       if (!values || !Object.keys(values).length) ctx.throw(422, "Invalid submission");
 
       // Meta is display-only (stored + timeline note): strings, clipped.
+      // `consent` / `consentedAt` are the GDPR proof the frontend sends; they
+      // are not CRM properties (an unknown HubSpot key would fail the upsert).
       const rawMeta = ctx.request.body?.meta ?? {};
       const meta: SubmitMeta = {};
       for (const key of ["pagePath", "pageUrl", "originPath", "originLabel", "source"]) {
         const v = rawMeta[key];
         if (typeof v === "string" && v) meta[key] = v.slice(0, 500);
+      }
+      if (rawMeta.consent === true) meta.consent = true;
+      if (typeof rawMeta.consentedAt === "string" && rawMeta.consentedAt.trim()) {
+        meta.consentedAt = rawMeta.consentedAt.trim().slice(0, 40);
       }
 
       const outcome = await strapi.plugin("hubspot").service("forms").submit(entry, values, meta);

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+## 0.13.1 — 2026-09-21
+
+### Added
+- **GDPR proof on submissions.** `meta.consent` / `meta.consentedAt` sent by
+  the frontend are stored on the submission row and written on the HubSpot
+  timeline note. They are not CRM properties — an unknown HubSpot key would
+  fail the whole upsert. Rebuild HubSpot's native legal-consent block as a
+  required checkbox named `consent` (see README).
+
 ## 0.13.0 — 2026-08-31
 
 ### Added
