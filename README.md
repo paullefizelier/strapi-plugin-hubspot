@@ -5,9 +5,10 @@
 Build multi-step lead forms in a dedicated admin page: fields mapped to your
 portal's *real* CRM properties through a searchable picker, conditional fields
 and steps (AND/OR rules re-evaluated server-side), a public API your frontend
-renders and posts to, and a submission pipeline that upserts the Contact,
-finds-or-creates the Company by corporate domain, drops a recap note on the
-timeline, and stores every submission in Strapi whatever the CRM's mood.
+renders and posts to, and a submission pipeline that posts a **native HubSpot
+form conversion** (Forms API + visitor `hutk`), finds-or-creates the Company
+by corporate domain, and stores every submission in Strapi whatever the CRM's
+mood.
 
 Under it, the safety net this plugin has always been: property pickers as
 custom fields for your own content types, save-time mapping validation, a
@@ -43,20 +44,28 @@ Permissions**):
 | `GET` | `/api/hubspot/forms/:slug?locale=` | The published form — meta, steps, fields, conditions. The CRM mapping is stripped: the browser never learns your property names |
 | `POST` | `/api/hubspot/forms/:slug/submit` | Validates (bounds, conditions, required), maps server-side, syncs HubSpot, stores the submission |
 
-The submit pipeline, in order: contact upsert (`email` is the find-or-create
-key) through the plugin's sending service — pre-validation against the portal
-schema (a stale mapping costs one answer, never the lead), retries, replay
-queue; then, when the email is on a corporate domain, company found-or-created
-by `domain` and associated to the contact; then a timeline note recapping the
-answers and the lead's origin. Company and note are best-effort and can be
-turned off:
+The submit pipeline, in order: HubSpot **Forms API** (native conversion —
+Original Source, workflows, lead-center notifications) when a marketing form
+GUID is set on the builder form or via `forms.defaultFormId`; the visitor's
+`hutk` is forwarded so attribution sticks. Then the contact is looked up by
+email and, when the address is on a corporate domain, the company is
+found-or-created and associated. A CRM contact upsert is the **fallback**
+when no GUID is configured — it does not count as a form conversion.
+Timeline notes are opt-in and only used on that fallback.
+
+Portal id, region and form GUIDs are configuration. A test portal today,
+production tomorrow: swap `portalId` / `region` / the GUID, no code change.
 
 ```ts
 hubspot: {
   config: {
+    apiKey: env("HUBSPOT_API_KEY"),
+    portalId: env("HUBSPOT_PORTAL_ID"),       // test now, production later
+    region: env("HUBSPOT_REGION", "eu1"),     // eu1 → api-eu1.hsforms.com
     forms: {
       companyFromDomain: true, // Company by corporate domain + association
-      timelineNote: true,      // recap note on the contact (and company)
+      timelineNote: false,     // recap note on the CRM-upsert fallback only
+      defaultFormId: env("HUBSPOT_DEFAULT_FORM_ID", ""),
     },
   },
 }
@@ -69,9 +78,9 @@ lives in your database, not in HubSpot's availability.
 ### GDPR consent
 
 HubSpot's native *legal consent* block is **not** a CRM field. Importing a
-HubSpot form skips it (you'll see "rebuild it as a field") because this
-builder maps answers onto Contact/Company properties, and an unknown property
-makes HubSpot reject the whole upsert.
+HubSpot form skips it (you'll see "rebuild it as a field"). The Forms API
+submit sends `legalConsentOptions` when the HubSpot marketing form has a
+GDPR block and the visitor ticked consent.
 
 To connect consent so the CRM and Strapi both keep a proof:
 
@@ -81,17 +90,19 @@ To connect consent so the CRM and Strapi both keep a proof:
    **Checkbox**, name it `consent` (that name is what the site recognizes —
    it will not inject a second box), mark it **required**.
 3. **Map it**: Object = Contact, property = `rgpd_consent`. The visitor's tick
-   then lands on the contact. Leave `consentedAt` unmapped; the frontend
-   sends it in `meta.consentedAt`, stored on the submission and on the
-   timeline note.
-4. **Publish** the form. The public submit pipeline already refuses a payload
+   then lands on the contact (if that property is on the HubSpot form) and in
+   `legalConsentOptions`. Leave `consentedAt` unmapped; the frontend sends it
+   in `meta.consentedAt`, stored on the submission.
+4. **Point the builder form at a HubSpot marketing form** (right-hand panel)
+   so the tick is a native conversion, not a CRM note.
+5. **Publish** the form. The public submit pipeline already refuses a payload
    without consent when the site is in front (Nuxt BFF). Direct calls to
    `/api/hubspot/forms/:slug/submit` still accept a form that has no consent
    field — add the checkbox so required-field validation covers them too.
 
-The newsletter block on the site is **not** a HubSpot form: it upserts the
-email as a contact and writes a timeline note with the consent timestamp.
-No form to create in the builder for that one.
+The frontend should also send `meta.hutk` (the `hubspotutk` cookie set by
+HubSpot's tracking script) and `meta.pageUrl` so Original Source is Organic
+Search / Direct / etc. rather than *Offline sources*.
 
 ### Browsing submissions
 
@@ -402,6 +413,8 @@ export default ({ env }) => ({
     config: {
       // Optional — the key can also be set from Settings → HubSpot.
       apiKey: env("HUBSPOT_API_KEY", ""),
+      portalId: env("HUBSPOT_PORTAL_ID", ""),
+      region: env("HUBSPOT_REGION", "eu1"),
 
       // Optional — objects whose properties are offered.
       // Defaults to ["contact", "company"]. Standard names: contact, company,
@@ -448,6 +461,10 @@ Create a **private app** in HubSpot with a read scope per object you list:
 - `crm.schemas.contacts.read`
 - `crm.schemas.companies.read`
 - `crm.schemas.deals.read`, `crm.schemas.custom.read`… as needed
+- `crm.objects.contacts.read` / `write`, `crm.objects.companies.read` / `write`
+- `forms` — list portal forms (import + builder picker) and **submit** them
+  via the Forms API (native conversions). Without this scope the pipeline
+  falls back to a CRM upsert, which HubSpot treats as an offline source.
 
 An object the token can't read is **skipped, not fatal**: the picker keeps
 working for the others and explains which one is missing a scope. `oauth` is
@@ -457,10 +474,10 @@ turn on the *view in HubSpot* links.
 ### Regions
 
 The REST API is global: `api.hubapi.com` routes by token, whatever the portal's
-hosting region. The **web app is not** — an EU-hosted portal lives on
-`app-eu1.hubspot.com`. Deep links are built from the `uiDomain` HubSpot reports
-for your portal rather than a hardcoded host, so they point at the right region
-without any configuration.
+hosting region. The **web app and the Forms API are not** — an EU-hosted portal
+lives on `app-eu1.hubspot.com` and submits to `api-eu1.hsforms.com`. Set
+`config.region` (`eu1`, `na1`, …) to match. Deep links are built from the
+`uiDomain` HubSpot reports for your portal rather than a hardcoded host.
 
 The key is resolved in this order, first match wins:
 

@@ -129,6 +129,8 @@ export interface FormEntryDto {
   submitLabel?: string | null;
   successMessage?: string | null;
   class?: string | null;
+  /** Marketing form GUID in the connected HubSpot portal. */
+  hubspotFormId?: string | null;
   locale?: string | null;
   updatedAt?: string;
   definition: FormDefinition;

@@ -1,12 +1,15 @@
 /**
  * The form-builder server side: shaping a published form for the public API,
- * and turning a submission into HubSpot upserts.
+ * and turning a submission into a HubSpot marketing-form conversion.
  *
- * The pipeline mirrors what a B2B lead capture needs: the person is upserted
- * as a Contact (email is the dedup key); when the email is on a corporate
- * domain the company is found-or-created by `domain` and associated to the
- * contact; a timeline note recaps the whole submission for whoever picks the
- * lead up. Company and note are best-effort — the contact is the lead.
+ * The pipeline: post the answers to HubSpot's Forms API (native conversion,
+ * workflows, original source, lead-center notifications) with the visitor's
+ * `hutk`; look the contact back up by email; when the email is on a corporate
+ * domain the company is found-or-created by `domain` and associated. A CRM
+ * contact upsert is the fallback when no form GUID is configured — it does
+ * not count as a form conversion. Timeline notes are opt-in and only used
+ * on that fallback. Company sync is best-effort; the form submission is
+ * the lead.
  */
 
 import type { Core } from "@strapi/strapi";
@@ -21,6 +24,17 @@ import {
   type CompanyHit,
   type CompanyMap,
 } from "./company";
+import {
+  filterToFormFields,
+  findContactIdByEmail,
+  isFormGuid,
+  loadFormShape,
+  sanitizeHutk,
+  sanitizeIp,
+  sanitizePortalId,
+  submitMarketingForm,
+  toHsFields,
+} from "./hsforms";
 import { checkMapping, loadSchema, resolveObjects, type Problem } from "./properties";
 import { resolveApiKey } from "./settings";
 
@@ -33,6 +47,7 @@ export interface FormEntry {
   submitLabel?: string | null;
   successMessage?: string | null;
   class?: string | null;
+  hubspotFormId?: string | null;
   locale?: string | null;
   definition: FormDefinition;
   [key: string]: unknown;
@@ -205,7 +220,10 @@ export interface SubmitOutcome {
 
 interface FormsConfig {
   companyFromDomain?: boolean;
+  /** Recap note on the CRM-upsert fallback only — not used after a Forms API submit. */
   timelineNote?: boolean;
+  /** Portal-wide marketing form GUID when a builder form doesn't set its own. */
+  defaultFormId?: string;
 }
 
 const escapeHtml = (s: string) =>
@@ -292,8 +310,18 @@ export function createFormsService(
   const formsConfig = (): Required<FormsConfig> => ({
     companyFromDomain: true,
     timelineNote: true,
+    defaultFormId: "",
     ...(strapi.plugin("hubspot").config("forms", {}) as FormsConfig),
   });
+
+  const stringProps = (props: Record<string, Primitive>): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(props)) {
+      if (value === "" || value == null) continue;
+      out[key] = typeof value === "boolean" ? (value ? "true" : "false") : String(value);
+    }
+    return out;
+  };
 
   /**
    * Drops the properties the portal would reject — HubSpot fails an upsert
@@ -549,7 +577,11 @@ export function createFormsService(
       }
     }
 
-    // Best-effort CRM sync — a HubSpot outage must never lose the lead.
+    // Best-effort HubSpot sync — a CRM outage must never lose the lead.
+    // Prefer the marketing Forms API when a GUID is configured (per-form or
+    // portal default): that is what HubSpot counts as a conversion. CRM
+    // upsert is the fallback for installs that haven't pointed at a form yet.
+    let usedFormsApi = false;
     if (email && apiKey) {
       const groups = groupByObject(form.definition, resolution.values);
       for (const [object, props] of Object.entries(companyGroups)) {
@@ -558,17 +590,74 @@ export function createFormsService(
       const partition = await partitionBySchema(apiKey, groups);
       rejected = partition.rejected;
 
-      const result = await strapi
-        .plugin("hubspot")
-        .service("submit")
-        .upsert({
-          object: "contact",
-          idProperty: "email",
-          properties: { ...(partition.accepted.contact ?? {}), email },
-        });
-      if (result.ok) {
-        hubspotSynced = true;
-        contactId = result.id;
+      const portalId = sanitizePortalId(strapi.plugin("hubspot").config("portalId", ""));
+      const region = String(strapi.plugin("hubspot").config("region", "eu1") || "eu1");
+      const ownGuid = typeof form.hubspotFormId === "string" ? form.hubspotFormId.trim() : "";
+      const formGuid = isFormGuid(ownGuid)
+        ? ownGuid
+        : isFormGuid(config.defaultFormId)
+          ? config.defaultFormId.trim()
+          : "";
+
+      if (portalId && formGuid) {
+        try {
+          const shape = await loadFormShape(apiKey, formGuid);
+          const fields = filterToFormFields(
+            toHsFields({ ...(stringProps(partition.accepted.contact ?? {})), email }),
+            shape?.names ?? null,
+          );
+          if (fields.length && !fields.some((f) => f.name === "email")) {
+            fields.unshift({ name: "email", value: email });
+          }
+          const submitted = await submitMarketingForm({
+            apiKey,
+            portalId,
+            formGuid,
+            region,
+            fields: fields.length ? fields : [{ name: "email", value: email }],
+            context: {
+              hutk: sanitizeHutk(meta.hutk),
+              pageUri: typeof meta.pageUrl === "string" ? meta.pageUrl : undefined,
+              pageName:
+                (typeof meta.pageName === "string" && meta.pageName) ||
+                (form.title || form.name) ||
+                undefined,
+              ipAddress: sanitizeIp(meta.ipAddress),
+            },
+            consent: { given: meta.consent === true },
+            formHasLegalConsent: shape?.hasLegalConsent,
+          });
+          if (submitted.ok) {
+            hubspotSynced = true;
+            usedFormsApi = true;
+            try {
+              contactId = await findContactIdByEmail(apiKey, email);
+            } catch (err) {
+              strapi.log.warn(
+                `[hubspot] contact lookup after form submit failed — ${(err as Error).message}`,
+              );
+            }
+          } else {
+            strapi.log.warn(`[hubspot] Forms API submit failed — ${submitted.error}`);
+          }
+        } catch (err) {
+          strapi.log.warn(`[hubspot] Forms API submit failed — ${(err as Error).message}`);
+        }
+      }
+
+      if (!usedFormsApi) {
+        const result = await strapi
+          .plugin("hubspot")
+          .service("submit")
+          .upsert({
+            object: "contact",
+            idProperty: "email",
+            properties: { ...(partition.accepted.contact ?? {}), email },
+          });
+        if (result.ok) {
+          hubspotSynced = true;
+          contactId = result.id;
+        }
       }
 
       // Dedup order: mapped SIRET property → corporate email domain → bare
@@ -606,7 +695,9 @@ export function createFormsService(
         }
       }
 
-      if (contactId && config.timelineNote) {
+      // Notes are the CRM-upsert fallback only. A Forms API submit already
+      // shows as a native conversion — a duplicate recap would hide that.
+      if (contactId && config.timelineNote && !usedFormsApi) {
         try {
           await createLeadNote(apiKey, {
             contactId,

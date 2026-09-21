@@ -35,6 +35,7 @@ const WRITABLE = [
   "submitLabel",
   "successMessage",
   "class",
+  "hubspotFormId",
 ] as const;
 
 const slugify = (value: string) =>
@@ -466,6 +467,7 @@ export function createFormsAdminController(strapi: Core.Strapi) {
           submitLabel: source.submitLabel,
           successMessage: source.successMessage,
           class: source.class,
+          hubspotFormId: (source.hubspotFormId as string | null | undefined) ?? null,
           definition: source.definition,
         };
         if (targetId) {

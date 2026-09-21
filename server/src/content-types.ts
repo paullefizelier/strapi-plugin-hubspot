@@ -54,6 +54,13 @@ export default {
         submitLabel: localizedString(),
         successMessage: localizedString("text"),
         class: { type: "string" },
+        // Marketing form GUID of the connected HubSpot portal. Test portal
+        // today, production later — swap the private app + this GUID, no
+        // code change. Empty = CRM upsert fallback (no native conversion).
+        hubspotFormId: {
+          type: "string",
+          pluginOptions: { i18n: { localized: false } },
+        },
         definition: {
           type: "json",
           required: true,

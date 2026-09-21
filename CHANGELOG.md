@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 0.14.0 — 2026-09-21
+
+### Changed — native HubSpot form conversions
+- Submissions of a built form now post to HubSpot's **Forms API**
+  (`/submissions/v3/integration/secure/submit/{portalId}/{formGuid}`) when a
+  marketing form GUID is set. That is what HubSpot counts as a conversion:
+  Original Source, workflows, lead-center notifications, reporting.
+- The GUID is configuration, not code: pick it in the builder (or set
+  `forms.defaultFormId`), and swap `portalId` / `region` when moving from a
+  test portal to production.
+- The visitor's `hubspotutk` (`meta.hutk`) is forwarded as `context.hutk` so
+  attribution sticks to the session.
+- Extra fields not declared on the HubSpot form are dropped (they 400 the
+  whole submit). GDPR `legalConsentOptions` is sent when the HubSpot form
+  has a consent block.
+- **CRM contact upsert is the fallback** when no GUID is configured. Timeline
+  notes remain available (`forms.timelineNote`, default `true`) on that
+  fallback only — they are not form conversions.
+- Company find-or-create (SIRET / domain) still runs after a successful
+  submit, once the contact is looked up by email.
+
+### Added
+- Form attribute `hubspotFormId` and a picker in the builder.
+- Plugin config `portalId`, `region` (`eu1` by default), `forms.defaultFormId`.
+
 ## 0.13.1 — 2026-09-21
 
 ### Added

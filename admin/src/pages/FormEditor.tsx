@@ -27,6 +27,7 @@ import {
   type FormEntryDto,
   type FormField,
   type FormStep,
+  type HubspotSource,
   type MappingProblem,
 } from "../builder/types";
 import { getTranslation } from "../getTranslation";
@@ -73,6 +74,7 @@ const FormEditor = () => {
   const [errors, setErrors] = React.useState<DefinitionError[]>([]);
   const [problems, setProblems] = React.useState<MappingProblem[]>([]);
   const [feedback, setFeedback] = React.useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  const [hsForms, setHsForms] = React.useState<HubspotSource[]>([]);
 
   const t = (id: string, defaultMessage: string, values?: Record<string, string | number>) =>
     formatMessage({ id: getTranslation(id), defaultMessage }, values);
@@ -94,6 +96,12 @@ const FormEditor = () => {
     get<AdminLocale[]>("/i18n/locales")
       .then(({ data }) => Array.isArray(data) && setLocales(data))
       .catch(() => setLocales([]));
+  }, [get]);
+
+  React.useEffect(() => {
+    get<{ forms?: HubspotSource[] }>(`/${PLUGIN_ID}/builder/import/hubspot`)
+      .then(({ data }) => setHsForms(Array.isArray(data.forms) ? data.forms : []))
+      .catch(() => setHsForms([]));
   }, [get]);
 
   React.useEffect(() => {
@@ -216,6 +224,7 @@ const FormEditor = () => {
           submitLabel: entry.submitLabel,
           successMessage: entry.successMessage,
           class: entry.class,
+          hubspotFormId: entry.hubspotFormId ?? "",
           definition,
         },
       );
@@ -692,6 +701,50 @@ const FormEditor = () => {
                     patchEntry({ class: e.target.value })
                   }
                 />
+              </Field.Root>
+              <Field.Root>
+                <Field.Label>{t("editor.hubspot-form", "HubSpot marketing form")}</Field.Label>
+                {hsForms.length ? (
+                  <SingleSelect
+                    value={entry.hubspotFormId ?? ""}
+                    placeholder={t(
+                      "editor.hubspot-form-placeholder",
+                      "Pick a form of the connected portal",
+                    )}
+                    onChange={(id: string | number) =>
+                      patchEntry({ hubspotFormId: String(id) || null })
+                    }
+                  >
+                    <SingleSelectOption value="">
+                      {t("editor.hubspot-form-none", "None — CRM upsert only")}
+                    </SingleSelectOption>
+                    {entry.hubspotFormId &&
+                      !hsForms.some((f) => f.id === entry.hubspotFormId) && (
+                        <SingleSelectOption value={entry.hubspotFormId}>
+                          {entry.hubspotFormId}
+                        </SingleSelectOption>
+                      )}
+                    {hsForms.map((f) => (
+                      <SingleSelectOption key={f.id} value={f.id}>
+                        {f.name}
+                      </SingleSelectOption>
+                    ))}
+                  </SingleSelect>
+                ) : (
+                  <TextInput
+                    value={entry.hubspotFormId ?? ""}
+                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      patchEntry({ hubspotFormId: e.target.value.trim() || null })
+                    }
+                  />
+                )}
+                <Typography variant="pi" textColor="neutral600">
+                  {t(
+                    "editor.hubspot-form-hint",
+                    "Submissions go through HubSpot’s Forms API so they count as conversions. Switch the connected portal (test → production) and pick the matching form — nothing is hardcoded.",
+                  )}
+                </Typography>
               </Field.Root>
               <Typography variant="pi" textColor="neutral600">
                 {t(

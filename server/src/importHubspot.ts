@@ -44,6 +44,7 @@ export interface ConvertedHubspotForm {
   name: string;
   submitLabel?: string | null;
   successMessage?: string | null;
+  hubspotFormId?: string | null;
   definition: FormDefinition;
   skipped: SkippedItem[];
 }
@@ -266,6 +267,7 @@ export function convertHubspotForm(raw: RawHubspotForm): ConvertedHubspotForm {
     submitLabel: raw.displayOptions?.submitButtonText || null,
     successMessage:
       postSubmit?.type === "thank_you" && postSubmit.value ? postSubmit.value : null,
+    hubspotFormId: raw.id ?? null,
     // HubSpot forms are single-page: one step, reorganizable in the builder.
     definition: { version: 1, steps: [{ id: makeId("stp"), fields }] },
     skipped,

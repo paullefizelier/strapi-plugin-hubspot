@@ -25,6 +25,8 @@ import { makeValidationMiddleware, type ValidateTarget } from "./validation";
  *   enabled: true,
  *   config: {
  *     apiKey: env("HUBSPOT_API_KEY"),   // optional — can be set from the admin UI
+ *     portalId: env("HUBSPOT_PORTAL_ID"), // test portal today, production later
+ *     region: env("HUBSPOT_REGION", "eu1"),
  *     validate: [                       // optional — entries whose mappings are checked on save
  *       { uid: "api::form.form", objectField: "hsObject", propertyField: "hsProperty" },
  *     ],
@@ -42,17 +44,27 @@ const FORMS_ACTION = "plugin::hubspot.forms";
 const config = {
   default: {
     apiKey: "",
+    // HubSpot account that receives form submissions. A test portal id is
+    // fine in development; production swaps this env var, not the code.
+    portalId: "",
+    // Hosting region of that portal (`eu1`, `na1`, …). Drives the Forms API
+    // host (`api-eu1.hsforms.com`) — CRM stays on api.hubapi.com.
+    region: "eu1",
     // Objects whose properties are offered. Names from the standard set, or
     // `{ name, path }` for a custom object type.
     objects: ["contact", "company"] as unknown[],
     validate: [] as ValidateTarget[],
-    // Submission pipeline of the built forms. Both default to true:
+    // Submission pipeline of the built forms:
     //  - companyFromDomain: a corporate email upserts the Company (deduped by
     //    domain) and associates it to the contact;
-    //  - timelineNote: a note recaps the submission on the contact's timeline.
+    //  - timelineNote: recap note on the CRM-upsert fallback only (off when
+    //    submissions go through the marketing Forms API);
+    //  - defaultFormId: portal-wide marketing form GUID when a builder form
+    //    doesn't set its own — swap with the portal at production cutover.
     forms: {
       companyFromDomain: true,
       timelineNote: true,
+      defaultFormId: "",
       // Per-IP brakes on the public routes; 0 disables one.
       rateLimit: { submitPerMinute: 6, searchPerMinute: 30 },
     },
@@ -250,18 +262,25 @@ const controllers = {
       const values = sanitizeRawValues(ctx.request.body?.values);
       if (!values || !Object.keys(values).length) ctx.throw(422, "Invalid submission");
 
-      // Meta is display-only (stored + timeline note): strings, clipped.
-      // `consent` / `consentedAt` are the GDPR proof the frontend sends; they
-      // are not CRM properties (an unknown HubSpot key would fail the upsert).
+      // Meta is display-only (stored): strings, clipped.
+      // `consent` / `consentedAt` are the GDPR proof the frontend sends.
+      // `hutk` is the HubSpot tracking cookie — required for Original Source.
       const rawMeta = ctx.request.body?.meta ?? {};
       const meta: SubmitMeta = {};
-      for (const key of ["pagePath", "pageUrl", "originPath", "originLabel", "source"]) {
+      for (const key of ["pagePath", "pageUrl", "pageName", "originPath", "originLabel", "source", "ipAddress"]) {
         const v = rawMeta[key];
         if (typeof v === "string" && v) meta[key] = v.slice(0, 500);
       }
       if (rawMeta.consent === true) meta.consent = true;
       if (typeof rawMeta.consentedAt === "string" && rawMeta.consentedAt.trim()) {
         meta.consentedAt = rawMeta.consentedAt.trim().slice(0, 40);
+      }
+      if (typeof rawMeta.hutk === "string" && rawMeta.hutk.trim()) {
+        meta.hutk = rawMeta.hutk.trim().slice(0, 128);
+      }
+      if (!meta.ipAddress) {
+        const ip = (ctx as unknown as { request: { ip?: string } }).request.ip;
+        if (ip) meta.ipAddress = ip.slice(0, 45);
       }
 
       const outcome = await strapi.plugin("hubspot").service("forms").submit(entry, values, meta);

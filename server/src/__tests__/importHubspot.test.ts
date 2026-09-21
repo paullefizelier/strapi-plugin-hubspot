@@ -61,6 +61,7 @@ describe("convertHubspotForm", () => {
     expect(out.name).toBe("Demande de démo");
     expect(out.submitLabel).toBe("Envoyer");
     expect(out.successMessage).toBe("Merci !");
+    expect(out.hubspotFormId).toBe("abc-123");
     expect(out.skipped).toEqual([]);
     expect(out.definition.version).toBe(1);
     expect(out.definition.steps).toHaveLength(1);
