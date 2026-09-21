@@ -36,7 +36,7 @@ import {
   toHsFields,
 } from "./hsforms";
 import { checkMapping, loadSchema, resolveObjects, type Problem } from "./properties";
-import { resolveApiKey } from "./settings";
+import { resolveAccount, resolveApiKey } from "./settings";
 
 export interface FormEntry {
   name: string;
@@ -590,13 +590,14 @@ export function createFormsService(
       const partition = await partitionBySchema(apiKey, groups);
       rejected = partition.rejected;
 
-      const portalId = sanitizePortalId(strapi.plugin("hubspot").config("portalId", ""));
-      const region = String(strapi.plugin("hubspot").config("region", "eu1") || "eu1");
+      const account = await resolveAccount(strapi);
+      const portalId = sanitizePortalId(account.portalId);
+      const region = account.region || "eu1";
       const ownGuid = typeof form.hubspotFormId === "string" ? form.hubspotFormId.trim() : "";
       const formGuid = isFormGuid(ownGuid)
         ? ownGuid
-        : isFormGuid(config.defaultFormId)
-          ? config.defaultFormId.trim()
+        : isFormGuid(account.defaultFormId)
+          ? account.defaultFormId.trim()
           : "";
 
       if (portalId && formGuid) {

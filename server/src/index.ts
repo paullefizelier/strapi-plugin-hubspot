@@ -11,9 +11,10 @@ import {
   type SubmitMeta,
 } from "./forms";
 import { createFormsAdminController, FORM_UID } from "./formsAdmin";
+import { listHubspotForms } from "./importHubspot";
 import { loadSchema, resolveObjects } from "./properties";
 import { createLimiter } from "./rateLimit";
-import { publicSettings, resolveApiKey, setStoredSettings } from "./settings";
+import { publicSettings, resolveApiKey, patchStoredSettings, clearStoredApiKey } from "./settings";
 import { fieldOrder, submissionsCsv, type SubmissionRow } from "./submissions";
 import { createSubmitService, FAILURE_UID } from "./submit";
 import { makeValidationMiddleware, type ValidateTarget } from "./validation";
@@ -24,8 +25,8 @@ import { makeValidationMiddleware, type ValidateTarget } from "./validation";
  * hubspot: {
  *   enabled: true,
  *   config: {
- *     apiKey: env("HUBSPOT_API_KEY"),   // optional — can be set from the admin UI
- *     portalId: env("HUBSPOT_PORTAL_ID"), // test portal today, production later
+ *     apiKey: env("HUBSPOT_API_KEY"),   // optional — Settings → HubSpot
+ *     portalId: env("HUBSPOT_PORTAL_ID"), // optional — Settings → HubSpot
  *     region: env("HUBSPOT_REGION", "eu1"),
  *     validate: [                       // optional — entries whose mappings are checked on save
  *       { uid: "api::form.form", objectField: "hsObject", propertyField: "hsProperty" },
@@ -33,7 +34,7 @@ import { makeValidationMiddleware, type ValidateTarget } from "./validation";
  *   },
  * }
  *
- * The API key set from the admin UI takes precedence over both.
+ * The values set from Settings → HubSpot take precedence over config and env.
  */
 
 /** RBAC action gating the settings screen and its routes. */
@@ -296,15 +297,27 @@ const controllers = {
 
   settings: ({ strapi }: { strapi: Core.Strapi }) => ({
     async get(ctx: { body: unknown }) {
-      ctx.body = await publicSettings(strapi);
+      const settings = await publicSettings(strapi);
+      let forms: { id: string; name: string }[] = [];
+      const { apiKey } = await resolveApiKey(strapi);
+      if (apiKey) {
+        try {
+          forms = await listHubspotForms(apiKey);
+        } catch {
+          forms = [];
+        }
+      }
+      ctx.body = { ...settings, forms };
     },
-    async update(ctx: { request: { body: { apiKey?: string } }; body: unknown }) {
-      const apiKey = (ctx.request.body?.apiKey ?? "").trim();
-      await setStoredSettings(strapi, apiKey ? { apiKey } : null);
+    async update(ctx: {
+      request: { body?: { apiKey?: string; portalId?: string; region?: string; defaultFormId?: string } };
+      body: unknown;
+    }) {
+      await patchStoredSettings(strapi, ctx.request.body ?? {});
       ctx.body = await publicSettings(strapi);
     },
     async reset(ctx: { body: unknown }) {
-      await setStoredSettings(strapi, null);
+      await clearStoredApiKey(strapi);
       ctx.body = await publicSettings(strapi);
     },
   }),

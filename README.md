@@ -365,10 +365,17 @@ its equivalent per object you send to).
 
 ### A settings screen
 
-**Settings → HubSpot** holds the private app token. It is stored server-side and
-never returned to the browser: the UI only receives whether a key exists, where
-it comes from, and its last four characters. A "Test connection" button
-round-trips to HubSpot and reports how many properties it can read.
+**Settings → HubSpot** holds the private app token **and** the HubSpot account
+that receives conversions: portal id, region (`eu1` / `na1`), and the default
+marketing form (picked from the connected portal). Values saved here override
+`config/plugins.ts` and env — switching test → production is an admin change,
+not a deploy.
+
+The token is stored server-side and never returned to the browser: the UI only
+receives whether a key exists, where it comes from, and its last four
+characters. Portal id / region / form GUID are not secrets and round-trip so
+they can be edited. A "Test connection" button round-trips to HubSpot and
+reports how many properties it can read.
 
 Access is gated by a dedicated RBAC permission — **Settings →
 Roles → Plugins → Hubspot**. A role without it neither sees the settings link
@@ -479,11 +486,13 @@ lives on `app-eu1.hubspot.com` and submits to `api-eu1.hsforms.com`. Set
 `config.region` (`eu1`, `na1`, …) to match. Deep links are built from the
 `uiDomain` HubSpot reports for your portal rather than a hardcoded host.
 
-The key is resolved in this order, first match wins:
+The key, portal id, region and default form GUID are resolved in this order,
+first match wins:
 
 1. saved from **Settings → HubSpot**
-2. `config.apiKey` in `config/plugins.ts`
-3. the `HUBSPOT_API_KEY` environment variable
+2. `config/plugins.ts` (`apiKey`, `portalId`, `region`, `forms.defaultFormId`)
+3. environment variables (`HUBSPOT_API_KEY`, `HUBSPOT_PORTAL_ID`,
+   `HUBSPOT_REGION`, `HUBSPOT_DEFAULT_FORM_ID`)
 
 ## Migrating an existing field
 

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.15.0 — 2026-09-21
+
+### Added — account settings in the admin
+- **Settings → HubSpot** now holds the portal id, region (`eu1` / `na1`) and
+  the default marketing form (picked from the connected portal), not just the
+  private app token. Values saved here override `config/plugins.ts` and env.
+  Switching test → production is an admin change, not a deploy.
+
 ## 0.14.0 — 2026-09-21
 
 ### Changed — native HubSpot form conversions
