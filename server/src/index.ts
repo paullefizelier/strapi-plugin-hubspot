@@ -58,8 +58,8 @@ const config = {
     // Submission pipeline of the built forms:
     //  - companyFromDomain: a corporate email upserts the Company (deduped by
     //    domain) and associates it to the contact;
-    //  - timelineNote: recap note on the CRM-upsert fallback only (off when
-    //    submissions go through the marketing Forms API);
+    //  - timelineNote: recap note on the contact after a successful sync
+    //    (page URL, subject, answers) — alongside a Forms API conversion;
     //  - defaultFormId: portal-wide marketing form GUID when a builder form
     //    doesn't set its own — swap with the portal at production cutover.
     //  - submissionMode / writeExtraProperties / syncFieldsOnPublish: see
@@ -329,6 +329,7 @@ const controllers = {
           submissionMode?: string;
           writeExtraProperties?: boolean;
           syncFieldsOnPublish?: boolean;
+          timelineNote?: boolean;
         };
       };
       body: unknown;

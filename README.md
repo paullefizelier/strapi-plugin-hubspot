@@ -54,11 +54,14 @@ upserts can share the same plugin:
 | `forms.submissionMode` | `auto` | `auto`: Forms API when a marketing GUID is linked, else CRM upsert. `forms`: always try the Forms API. `crm`: never count as a conversion |
 | `forms.writeExtraProperties` | `true` | After a conversion, CRM-write mapped contact fields the HubSpot form dropped (they 400 the Forms API) |
 | `forms.syncFieldsOnPublish` | `false` | On publish, PATCH missing mapped **contact** fields onto the HubSpot form. Off by default so HubSpot-first installs aren't mutated |
+| `forms.timelineNote` | `true` | Recap note on the contact after a successful sync (page URL, subject, answers). Sits next to a native conversion; turn off if you only want the form submission |
 
-The visitor's `hutk` is forwarded so attribution sticks. Then the contact is
-looked up by email and, when the address is on a corporate domain, the company
-is found-or-created and associated. Timeline notes are opt-in and only used
-on the CRM-upsert path.
+The visitor's `hutk` is forwarded so attribution sticks. The conversion carries
+`context.pageUri` / `pageName` (the page the visitor submitted from). Then the
+contact is looked up by email and, when the address is on a corporate domain,
+the company is found-or-created and associated. Timeline notes (`forms.timelineNote`,
+default `true`) add a recap of that page plus the originating subject on the
+contact timeline — they don't replace the conversion.
 
 CRM properties are **never created**. Map to properties that already exist in
 the portal; opting into field sync only adds form fields that point at those
@@ -75,7 +78,7 @@ hubspot: {
     region: env("HUBSPOT_REGION", "eu1"),     // eu1 → api-eu1.hsforms.com
     forms: {
       companyFromDomain: true, // Company by corporate domain + association
-      timelineNote: false,     // recap note on the CRM-upsert fallback only
+      timelineNote: true,      // recap note (page + subject) next to the conversion
       defaultFormId: env("HUBSPOT_DEFAULT_FORM_ID", ""),
       submissionMode: "auto",  // auto | forms | crm
       writeExtraProperties: true,

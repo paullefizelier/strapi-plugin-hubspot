@@ -49,6 +49,7 @@ interface Settings {
   submissionMode?: SubmissionMode;
   writeExtraProperties?: boolean;
   syncFieldsOnPublish?: boolean;
+  timelineNote?: boolean;
   forms?: HubspotFormOption[];
 }
 
@@ -65,6 +66,7 @@ const HubspotSettings = () => {
   const [submissionMode, setSubmissionMode] = React.useState<SubmissionMode>("auto");
   const [writeExtraProperties, setWriteExtraProperties] = React.useState(true);
   const [syncFieldsOnPublish, setSyncFieldsOnPublish] = React.useState(false);
+  const [timelineNote, setTimelineNote] = React.useState(true);
   const [forms, setForms] = React.useState<HubspotFormOption[]>([]);
   const [busy, setBusy] = React.useState(false);
   const [feedback, setFeedback] = React.useState<{ tone: "success" | "danger"; text: string } | null>(
@@ -82,6 +84,7 @@ const HubspotSettings = () => {
     setSubmissionMode(data.submissionMode === "crm" || data.submissionMode === "forms" ? data.submissionMode : "auto");
     setWriteExtraProperties(data.writeExtraProperties !== false);
     setSyncFieldsOnPublish(data.syncFieldsOnPublish === true);
+    setTimelineNote(data.timelineNote !== false);
     setForms(Array.isArray(data.forms) ? data.forms : []);
   };
 
@@ -109,6 +112,7 @@ const HubspotSettings = () => {
         submissionMode,
         writeExtraProperties,
         syncFieldsOnPublish,
+        timelineNote,
       });
       setApiKey("");
       await load();
@@ -389,6 +393,24 @@ const HubspotSettings = () => {
               {t(
                 "settings.sync.hint",
                 "Strapi-first installs: a field added here appears on the HubSpot form next publish. HubSpot-first installs should leave this off — importing a form already carries its fields. Properties themselves are never created; map to ones that exist in the portal.",
+              )}
+            </Typography>
+
+            <Checkbox
+              checked={timelineNote}
+              onCheckedChange={(checked: boolean | "indeterminate") =>
+                setTimelineNote(checked === true)
+              }
+            >
+              {t(
+                "settings.note.label",
+                "Also write a recap note on the contact (page, subject, answers)",
+              )}
+            </Checkbox>
+            <Typography variant="pi" textColor="neutral600">
+              {t(
+                "settings.note.hint",
+                "The conversion already carries the page URL (pageUri). The note puts that page plus the originating subject on the contact timeline, next to the native form submission.",
               )}
             </Typography>
           </Flex>

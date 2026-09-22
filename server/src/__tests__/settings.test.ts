@@ -83,6 +83,7 @@ describe("resolvePolicy", () => {
       submissionMode: "auto",
       writeExtraProperties: true,
       syncFieldsOnPublish: false,
+      timelineNote: true,
     });
   });
 
@@ -92,15 +93,17 @@ describe("resolvePolicy", () => {
         submissionMode: "crm",
         writeExtraProperties: false,
         syncFieldsOnPublish: true,
+        timelineNote: false,
       },
       config: {
-        forms: { submissionMode: "forms", writeExtraProperties: true, syncFieldsOnPublish: false },
+        forms: { submissionMode: "forms", writeExtraProperties: true, syncFieldsOnPublish: false, timelineNote: true },
       },
     });
     await expect(resolvePolicy(strapi)).resolves.toEqual({
       submissionMode: "crm",
       writeExtraProperties: false,
       syncFieldsOnPublish: true,
+      timelineNote: false,
     });
   });
 
@@ -135,6 +138,7 @@ describe("patchStoredSettings", () => {
       submissionMode: "crm",
       writeExtraProperties: false,
       syncFieldsOnPublish: true,
+      timelineNote: false,
     });
     expect(saved).toMatchObject({
       apiKey: "keep-me",
@@ -142,6 +146,7 @@ describe("patchStoredSettings", () => {
       submissionMode: "crm",
       writeExtraProperties: false,
       syncFieldsOnPublish: true,
+      timelineNote: false,
     });
   });
 });

@@ -6,8 +6,9 @@
  * conversion (with leftover CRM writes for mapped fields the HubSpot form
  * dropped), CRM upsert only, or automatic (Forms API when a GUID is linked).
  * Company find-or-create still runs after a successful submit. Timeline notes
- * are opt-in and only used on the CRM-upsert path. The form submission is
- * the lead — a CRM outage never loses it.
+ * (page URL, subject, answers) are optional extra context on the contact,
+ * alongside a native conversion. The form submission is the lead — a CRM
+ * outage never loses it.
  */
 
 import type { Core } from "@strapi/strapi";
@@ -219,7 +220,7 @@ export interface SubmitOutcome {
 
 interface FormsConfig {
   companyFromDomain?: boolean;
-  /** Recap note on the CRM-upsert fallback only — not used after a Forms API submit. */
+  /** Recap note on the contact after a successful sync (conversion or CRM upsert). */
   timelineNote?: boolean;
   /** Portal-wide marketing form GUID when a builder form doesn't set its own. */
   defaultFormId?: string;
@@ -623,6 +624,7 @@ export function createFormsService(
               pageUri: typeof meta.pageUrl === "string" ? meta.pageUrl : undefined,
               pageName:
                 (typeof meta.pageName === "string" && meta.pageName) ||
+                (typeof meta.originLabel === "string" && meta.originLabel) ||
                 (form.title || form.name) ||
                 undefined,
               ipAddress: sanitizeIp(meta.ipAddress),
@@ -717,9 +719,10 @@ export function createFormsService(
         }
       }
 
-      // Notes are the CRM-upsert fallback only. A Forms API submit already
-      // shows as a native conversion — a duplicate recap would hide that.
-      if (contactId && config.timelineNote && !usedFormsApi) {
+      // Recap on the contact (page, subject, answers). A Forms API conversion
+      // already appears as a native submission; the note is extra context for
+      // the sales timeline, not a substitute for the conversion.
+      if (contactId && policy.timelineNote) {
         try {
           await createLeadNote(apiKey, {
             contactId,

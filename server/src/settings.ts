@@ -30,6 +30,7 @@ export interface StoredSettings {
   submissionMode?: SubmissionMode;
   writeExtraProperties?: boolean;
   syncFieldsOnPublish?: boolean;
+  timelineNote?: boolean;
 }
 
 export interface HubspotPolicy {
@@ -39,6 +40,8 @@ export interface HubspotPolicy {
   writeExtraProperties: boolean;
   /** On publish, PATCH missing mapped contact fields onto the HubSpot form. */
   syncFieldsOnPublish: boolean;
+  /** Recap note on the contact (page URL, subject, answers) after a successful sync. */
+  timelineNote: boolean;
 }
 
 export interface PublicSettings {
@@ -56,6 +59,7 @@ export interface PublicSettings {
   submissionMode: SubmissionMode;
   writeExtraProperties: boolean;
   syncFieldsOnPublish: boolean;
+  timelineNote: boolean;
 }
 
 export interface HubspotAccount {
@@ -107,6 +111,7 @@ interface FormsCfg {
   submissionMode?: unknown;
   writeExtraProperties?: unknown;
   syncFieldsOnPublish?: unknown;
+  timelineNote?: unknown;
 }
 
 function formsCfg(strapi: Core.Strapi): FormsCfg {
@@ -120,6 +125,7 @@ export function policyFrom(stored: StoredSettings, forms: FormsCfg): HubspotPoli
       asBool(stored.writeExtraProperties) ?? asBool(forms.writeExtraProperties) ?? true,
     syncFieldsOnPublish:
       asBool(stored.syncFieldsOnPublish) ?? asBool(forms.syncFieldsOnPublish) ?? false,
+    timelineNote: asBool(stored.timelineNote) ?? asBool(forms.timelineNote) ?? true,
   };
 }
 
@@ -201,6 +207,7 @@ export interface SettingsPatch {
   submissionMode?: unknown;
   writeExtraProperties?: unknown;
   syncFieldsOnPublish?: unknown;
+  timelineNote?: unknown;
 }
 
 /** Merge a PATCH-like body into the store without dropping the saved key. */
@@ -225,6 +232,9 @@ export async function patchStoredSettings(strapi: Core.Strapi, body: SettingsPat
   }
   if ("syncFieldsOnPublish" in body && typeof body.syncFieldsOnPublish === "boolean") {
     next.syncFieldsOnPublish = body.syncFieldsOnPublish;
+  }
+  if ("timelineNote" in body && typeof body.timelineNote === "boolean") {
+    next.timelineNote = body.timelineNote;
   }
   await setStoredSettings(strapi, next);
 }

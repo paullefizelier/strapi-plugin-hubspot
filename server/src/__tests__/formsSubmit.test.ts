@@ -631,8 +631,16 @@ describe("forms.submit — hybrid conversion", () => {
     );
     expect(conversionFields).toEqual(["email", "firstname"]);
     expect(conversion?.body).toMatchObject({
-      context: { hutk: "aabbccddeeff00112233445566778899" },
+      context: {
+        hutk: "aabbccddeeff00112233445566778899",
+        pageUri: "https://x.co/entreprises",
+        pageName: "Intérim",
+      },
     });
+
+    const note = calls.find((c) => c.path.endsWith("/objects/notes"));
+    expect(JSON.stringify(note?.body)).toContain("https://x.co/entreprises");
+    expect(JSON.stringify(note?.body)).toContain("Intérim");
 
     const upsert = calls.find((c) => c.path.endsWith("/contacts/batch/upsert"));
     const input = (upsert?.body as { inputs: { properties: Record<string, string> }[] }).inputs[0];

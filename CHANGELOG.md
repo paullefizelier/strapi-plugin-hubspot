@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.16.3 — 2026-09-22
+
+### Changed
+- Timeline recap notes (`forms.timelineNote`, default `true`) now also write
+  after a native Forms API conversion: page URL and originating subject sit
+  on the contact next to the conversion. The Forms API already forwards
+  `context.pageUri` / `pageName`. Toggle lives in Settings → HubSpot.
+
 ## 0.16.2 — 2026-09-22
 
 ### Added
