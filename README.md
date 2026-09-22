@@ -174,10 +174,10 @@ the portal. The translation carries over what the builder can express:
 - dependent fields become `visibleIf` conditions (value lists are expanded
   into OR'd/AND'd rules).
 
-Everything else — file uploads, hidden fields, content blocks, GDPR consent
-blocks, an operator with no equivalent — is **skipped and reported** after the
-import, so nothing is silently half-migrated. The HubSpot original is never
-modified; re-importing overwrites the draft, never the published version.
+The HubSpot original is never modified. Re-importing (or **Resync from HubSpot**
+in the editor) updates mapped fields in place and appends new ones — Strapi
+steps, conditions and extra fields stay. Matching is by HubSpot form GUID,
+then slug. The published version is never touched.
 
 ### i18n and publishing
 

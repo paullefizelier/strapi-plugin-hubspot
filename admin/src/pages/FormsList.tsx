@@ -232,7 +232,7 @@ const FormsList = () => {
                   <Typography variant="pi" textColor="neutral600" tag="p">
                     {t(
                       "forms.import-hubspot-hint",
-                      "Translates a form built in HubSpot into a draft here, CRM mapping included. What the builder can't express is skipped and reported. Re-importing overwrites the draft.",
+                      "Translates a form built in HubSpot into a draft here, CRM mapping included. What the builder can't express is skipped and reported. Re-importing updates mapped fields in place and appends new ones.",
                     )}
                   </Typography>
                 </Box>

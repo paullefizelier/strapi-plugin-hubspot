@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.16.2 — 2026-09-22
+
+### Added
+- **Resync from HubSpot** in the form editor (and a safer list re-import):
+  mapped fields update in place (label, type, required, options), new HubSpot
+  fields append to the last step, Strapi steps / conditions / extra fields
+  stay. Matching uses the linked form GUID rather than the slug.
+
 ## 0.16.1 — 2026-09-22
 
 ### Changed

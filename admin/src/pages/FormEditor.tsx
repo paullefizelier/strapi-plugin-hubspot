@@ -36,6 +36,7 @@ import {
   type FormStep,
   type HubspotSource,
   type MappingProblem,
+  type SkippedItem,
 } from "../builder/types";
 import { getTranslation } from "../getTranslation";
 import { PLUGIN_ID } from "../pluginId";
@@ -316,6 +317,49 @@ const FormEditor = () => {
     }
   };
 
+  const resync = async () => {
+    if (dirty && !(await save())) return;
+    setBusy(true);
+    setFeedback(null);
+    try {
+      const { data } = await post<{
+        form: FormEntryDto;
+        added?: string[];
+        updated?: string[];
+        skipped?: SkippedItem[];
+      }>(`/${PLUGIN_ID}/builder/forms/${documentId}/resync${query}`);
+      if (data.form) {
+        setEntry(data.form);
+        setDirty(false);
+      }
+      const added = data.added?.length ?? 0;
+      const updated = data.updated?.length ?? 0;
+      const skipped = data.skipped?.length ?? 0;
+      setFeedback({
+        tone: "success",
+        text:
+          skipped > 0
+            ? t(
+                "editor.resynced-gaps",
+                "Resynced from HubSpot — {updated, plural, one {# updated} other {# updated}}, {added, plural, one {# added} other {# added}}, {skipped, plural, one {# skipped} other {# skipped}}.",
+                { updated, added, skipped },
+              )
+            : t(
+                "editor.resynced",
+                "Resynced from HubSpot — {updated, plural, one {# field updated} other {# fields updated}}, {added, plural, one {# added} other {# added}}.",
+                { updated, added },
+              ),
+      });
+    } catch {
+      setFeedback({
+        tone: "danger",
+        text: t("editor.resync-error", "Could not resync from HubSpot — is the form still linked?"),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const fieldFlags = (fieldId: string) => ({
     error: errors.find((e) => e.fieldId === fieldId),
     problem: problems.find((p) => p.fieldId === fieldId),
@@ -383,6 +427,13 @@ const FormEditor = () => {
           )}
           <Button variant="secondary" onClick={save} disabled={busy || !dirty}>
             {t("editor.save", "Save")}
+          </Button>
+          <Button
+            variant="tertiary"
+            onClick={resync}
+            disabled={busy || !entry.hubspotFormId}
+          >
+            {t("editor.resync", "Resync from HubSpot")}
           </Button>
           <Button onClick={publish} disabled={busy}>
             {t("editor.publish", "Publish")}
@@ -790,7 +841,7 @@ const FormEditor = () => {
                 <Typography variant="pi" textColor="neutral600">
                   {t(
                     "editor.hubspot-form-hint",
-                    "Submissions go through HubSpot’s Forms API so they count as conversions. Switch the connected portal (test → production) and pick the matching form — nothing is hardcoded.",
+                    "Submissions go through HubSpot’s Forms API so they count as conversions. After you change the form in HubSpot, use Resync from HubSpot — mapped fields update in place, new ones are appended, your steps stay.",
                   )}
                 </Typography>
               </Field.Root>

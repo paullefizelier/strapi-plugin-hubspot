@@ -10,7 +10,7 @@ import type { Core } from "@strapi/strapi";
 import { validateDefinition, type FormDefinition } from "./conditions";
 import { mappingProblems, SUBMISSION_UID, type FormEntry } from "./forms";
 import { isFormGuid, syncFieldsToHubspotForm } from "./hsforms";
-import { convertHubspotForm, fetchHubspotForm, listHubspotForms } from "./importHubspot";
+import { convertHubspotForm, fetchHubspotForm, listHubspotForms, mergeHubspotImport } from "./importHubspot";
 import { convertLegacyForm, type ImportMap } from "./importLegacy";
 import { loadSchema, resolveObjects, type Problem } from "./properties";
 import { resolveAccount, resolveApiKey, resolvePolicy } from "./settings";
@@ -411,9 +411,9 @@ export function createFormsAdminController(strapi: Core.Strapi) {
 
     /**
      * Converts one portal form into a plugin form draft, in the current
-     * locale. Slug derived from the HubSpot name: re-importing the same form
-     * overwrites the draft — never the published version, never the portal.
-     * What the builder can't express is skipped and returned in `skipped`.
+     * locale. Matching prefers the linked HubSpot GUID, then the slug.
+     * Re-importing merges: mapped fields update in place, new ones append,
+     * Strapi steps stay. Never the published version, never the portal.
      */
     async runHubspotImport(ctx: Ctx) {
       const formId = ctx.request.body?.formId;
@@ -433,26 +433,88 @@ export function createFormsAdminController(strapi: Core.Strapi) {
       const name = converted.name || "HubSpot form";
       const { skipped, definition, ...meta } = converted;
       const slug = slugify(name);
-      const existing = (await documents().findFirst({
-        filters: { slug },
-      } as never)) as unknown as { documentId: string } | null;
+      const existing =
+        ((await documents().findFirst({
+          filters: { hubspotFormId: formId },
+        } as never)) as unknown as { documentId: string; definition?: FormDefinition } | null) ??
+        ((await documents().findFirst({
+          filters: { slug },
+        } as never)) as unknown as { documentId: string; definition?: FormDefinition } | null);
 
-      let documentId: string;
       if (existing) {
+        const current = (await documents().findOne({
+          documentId: existing.documentId,
+          locale: ctx.query.locale,
+          status: "draft",
+        } as never)) as unknown as { definition?: FormDefinition } | null;
+        const merged = mergeHubspotImport(current?.definition ?? EMPTY_DEFINITION, definition);
         await documents().update({
           documentId: existing.documentId,
           locale: ctx.query.locale,
-          data: { ...meta, name, definition } as never,
+          data: {
+            hubspotFormId: meta.hubspotFormId ?? formId,
+            definition: merged.definition,
+          } as never,
         } as never);
-        documentId = existing.documentId;
-      } else {
-        const created = (await documents().create({
-          locale: ctx.query.locale,
-          data: { ...meta, name, slug, definition } as never,
-        } as never)) as unknown as { documentId: string };
-        documentId = created.documentId;
+        ctx.body = {
+          documentId: existing.documentId,
+          skipped,
+          added: merged.added,
+          updated: merged.updated,
+        };
+        return;
       }
-      ctx.body = { documentId, skipped };
+      const created = (await documents().create({
+        locale: ctx.query.locale,
+        data: { ...meta, name, slug, definition } as never,
+      } as never)) as unknown as { documentId: string };
+      ctx.body = { documentId: created.documentId, skipped, added: [], updated: [] };
+    },
+
+    /**
+     * Pull the linked HubSpot marketing form back into this draft: mapped
+     * fields update in place, new ones append, Strapi steps and extras stay.
+     */
+    async resync(ctx: Ctx) {
+      const entry = (await documents().findOne({
+        documentId: ctx.params.documentId!,
+        locale: ctx.query.locale,
+        status: "draft",
+      } as never)) as unknown as FormEntry | null;
+      if (!entry) ctx.throw(404, "Form not found");
+      const guid = typeof entry.hubspotFormId === "string" ? entry.hubspotFormId.trim() : "";
+      if (!isFormGuid(guid)) {
+        ctx.throw(400, "This form is not linked to a HubSpot marketing form.");
+      }
+      const { apiKey } = await resolveApiKey(strapi);
+      if (!apiKey) ctx.throw(400, "No HubSpot API key configured");
+
+      let converted: ReturnType<typeof convertHubspotForm>;
+      try {
+        converted = convertHubspotForm(await fetchHubspotForm(apiKey, guid));
+      } catch (err) {
+        strapi.log.warn(`[hubspot] form resync failed — ${(err as Error).message}`);
+        ctx.throw(502, (err as Error).message || "Cannot reach HubSpot");
+        return;
+      }
+
+      const merged = mergeHubspotImport(entry.definition ?? EMPTY_DEFINITION, converted.definition);
+      await documents().update({
+        documentId: ctx.params.documentId!,
+        locale: ctx.query.locale,
+        data: { definition: merged.definition } as never,
+      } as never);
+      const form = await documents().findOne({
+        documentId: ctx.params.documentId!,
+        locale: ctx.query.locale,
+        status: "draft",
+      } as never);
+      ctx.body = {
+        form,
+        added: merged.added,
+        updated: merged.updated,
+        skipped: converted.skipped,
+      };
     },
 
     /**

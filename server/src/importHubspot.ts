@@ -274,6 +274,87 @@ export function convertHubspotForm(raw: RawHubspotForm): ConvertedHubspotForm {
   };
 }
 
+function mappingKey(field: FormFieldDef): string | null {
+  const mapping = (field.hubspot ?? {}) as { object?: string; property?: string };
+  const property = mapping.property?.trim();
+  if (!property) return null;
+  return `${mapping.object?.trim() || "contact"}:${property}`;
+}
+
+function uniqueName(base: string, used: Set<string>): string {
+  if (!used.has(base)) return base;
+  let n = 2;
+  while (used.has(`${base}_${n}`)) n += 1;
+  return `${base}_${n}`;
+}
+
+export interface HubspotMergeResult {
+  definition: FormDefinition;
+  added: string[];
+  updated: string[];
+}
+
+/**
+ * Fold a freshly converted HubSpot form into an existing builder definition.
+ * Mapped fields are updated in place (label, type, required, options…) so
+ * Strapi steps, ids, conditions and extra fields survive. New HubSpot fields
+ * are appended to the last step. Nothing is deleted.
+ */
+export function mergeHubspotImport(
+  current: FormDefinition,
+  incoming: FormDefinition,
+): HubspotMergeResult {
+  const steps = (current.steps ?? []).map((step) => ({
+    ...step,
+    fields: [...(step.fields ?? [])],
+  }));
+  if (!steps.length) {
+    steps.push({ id: makeId("stp"), fields: [] });
+  }
+
+  const byKey = new Map<string, FormFieldDef>();
+  const usedNames = new Set<string>();
+  for (const step of steps) {
+    for (const field of step.fields) {
+      usedNames.add(field.name);
+      const key = mappingKey(field);
+      if (key) byKey.set(key, field);
+    }
+  }
+
+  const added: string[] = [];
+  const updated: string[] = [];
+  const incomingFields = (incoming.steps ?? []).flatMap((step) => step.fields ?? []);
+
+  for (const next of incomingFields) {
+    const key = mappingKey(next);
+    const existing = key ? byKey.get(key) : undefined;
+    if (existing) {
+      existing.label = next.label;
+      existing.type = next.type;
+      existing.required = next.required;
+      existing.placeholder = next.placeholder;
+      existing.helpText = next.helpText;
+      if (next.options) existing.options = next.options;
+      else delete existing.options;
+      if (!existing.visibleIf && next.visibleIf) existing.visibleIf = next.visibleIf;
+      updated.push(key!);
+      continue;
+    }
+    const field: FormFieldDef = {
+      ...next,
+      id: makeId("fld"),
+      name: uniqueName(next.name, usedNames),
+    };
+    usedNames.add(field.name);
+    if (key) byKey.set(key, field);
+    steps[steps.length - 1]!.fields.push(field);
+    added.push(key || field.name);
+  }
+
+  return { definition: { version: 1, steps }, added, updated };
+}
+
 /* ------------------------------------------------------------------ */
 /* Portal access                                                       */
 /* ------------------------------------------------------------------ */

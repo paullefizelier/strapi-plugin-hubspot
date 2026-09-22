@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { convertHubspotForm, type RawHubspotForm } from "../importHubspot";
+import { convertHubspotForm, mergeHubspotImport, type RawHubspotForm } from "../importHubspot";
+import type { FormDefinition } from "../conditions";
 
 /** A realistic marketing v3 form, trimmed to what the converter reads. */
 const raw: RawHubspotForm = {
@@ -217,6 +218,118 @@ describe("convertHubspotForm", () => {
       name: "",
       definition: { version: 1, steps: [{ fields: [] }] },
       skipped: [],
+    });
+  });
+});
+
+describe("mergeHubspotImport", () => {
+  it("updates mapped fields in place and keeps Strapi steps, ids and extras", () => {
+    const current: FormDefinition = {
+      version: 1,
+      steps: [
+        {
+          id: "stp_intro",
+          title: "Toi",
+          fields: [
+            {
+              id: "fld_first",
+              name: "prenom",
+              label: "Prénom",
+              type: "text",
+              hubspot: { object: "contact", property: "firstname" },
+            },
+          ],
+        },
+        {
+          id: "stp_more",
+          fields: [
+            {
+              id: "fld_note",
+              name: "note",
+              label: "Note interne",
+              type: "textarea",
+            },
+          ],
+        },
+      ],
+    };
+    const incoming = convertHubspotForm({
+      fieldGroups: [
+        {
+          fields: [
+            {
+              objectTypeId: "0-1",
+              name: "firstname",
+              label: "First name",
+              fieldType: "single_line_text",
+              required: true,
+              placeholder: "Ada",
+            },
+            {
+              objectTypeId: "0-1",
+              name: "email",
+              label: "Email",
+              fieldType: "email",
+              required: true,
+            },
+          ],
+        },
+      ],
+    }).definition;
+
+    const out = mergeHubspotImport(current, incoming);
+    expect(out.updated).toEqual(["contact:firstname"]);
+    expect(out.added).toEqual(["contact:email"]);
+    expect(out.definition.steps.map((s) => s.id)).toEqual(["stp_intro", "stp_more"]);
+    expect(out.definition.steps[0]!.fields[0]).toMatchObject({
+      id: "fld_first",
+      name: "prenom",
+      label: "First name",
+      required: true,
+      placeholder: "Ada",
+    });
+    expect(out.definition.steps[1]!.fields.map((f) => f.name)).toEqual(["note", "email"]);
+  });
+
+  it("does not overwrite a Strapi condition already on the field", () => {
+    const current: FormDefinition = {
+      version: 1,
+      steps: [
+        {
+          id: "stp_1",
+          fields: [
+            {
+              id: "fld_a",
+              name: "role",
+              type: "select",
+              visibleIf: { logic: "and", rules: [{ field: "fld_x", operator: "eq", value: "dev" }] },
+              hubspot: { object: "contact", property: "hs_role" },
+            },
+          ],
+        },
+      ],
+    };
+    const incoming: FormDefinition = {
+      version: 1,
+      steps: [
+        {
+          id: "stp_hs",
+          fields: [
+            {
+              id: "fld_hs",
+              name: "hs_role",
+              type: "select",
+              visibleIf: { logic: "or", rules: [{ field: "fld_hs", operator: "notEmpty" }] },
+              hubspot: { object: "contact", property: "hs_role" },
+            },
+          ],
+        },
+      ],
+    };
+    const out = mergeHubspotImport(current, incoming);
+    expect(out.definition.steps[0]!.fields[0]!.visibleIf).toEqual({
+      logic: "and",
+      rules: [{ field: "fld_x", operator: "eq", value: "dev" }],
     });
   });
 });
