@@ -5,7 +5,7 @@ export default defineConfig({
     // RTL's auto-cleanup hooks into the global afterEach.
     globals: true,
     environment: "node",
-    include: ["server/src/**/*.test.ts", "admin/src/**/*.test.tsx"],
+    include: ["server/src/**/*.test.ts", "admin/src/**/*.test.ts", "admin/src/**/*.test.tsx"],
     // Admin component tests run in a DOM; server logic stays on node.
     environmentMatchGlobs: [["admin/**", "jsdom"]],
     // The Strapi admin packages ship "type": "module" with CJS entry files,

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.16.1 — 2026-09-22
+
+### Changed
+- Fields in the builder can be dragged from one step to another (the grip
+  handle is no longer limited to reordering inside the current step). Arrow
+  buttons still move a field into the neighbouring step.
+
 ## 0.16.0 — 2026-09-22
 
 ### Added — submission policies

@@ -18,7 +18,14 @@ import {
 import { ArrowDown, ArrowLeft, ArrowUp, Drag, Plus, Trash } from "@strapi/icons";
 import { useFetchClient } from "@strapi/strapi/admin";
 import ConditionEditor from "../builder/ConditionEditor";
-import { SortableItem, SortableList } from "../builder/Sortable";
+import {
+  SortableBoard,
+  SortableContainer,
+  SortableGroup,
+  SortableItem,
+  arrayMove,
+  relocateField,
+} from "../builder/Sortable";
 import FieldPanel from "../builder/FieldPanel";
 import {
   fieldsBefore,
@@ -400,14 +407,29 @@ const FormEditor = () => {
         {/* Canvas */}
         <Box flex="1">
           <Flex direction="column" alignItems="stretch" gap={4}>
-            <SortableList
-              ids={definition.steps.map((s) => s.id)}
-              onReorder={(ids) => patchDefinition((steps) => reorderByIds(steps, ids))}
+            <SortableBoard
+              onDragEnd={({ active, over }) => {
+                if (!over || active.id === over.id) return;
+                const kind = active.data.current?.type;
+                if (kind === "step") {
+                  const ids = definition.steps.map((s) => s.id);
+                  const from = ids.indexOf(String(active.id));
+                  const to = ids.indexOf(String(over.id));
+                  if (from === -1 || to === -1) return;
+                  patchDefinition((steps) => reorderByIds(steps, arrayMove(ids, from, to)));
+                  return;
+                }
+                if (kind === "field") {
+                  patchDefinition((steps) => relocateField(steps, String(active.id), String(over.id)));
+                }
+              }}
             >
+            <SortableGroup ids={definition.steps.map((s) => s.id)}>
             {definition.steps.map((step, stepIndex) => (
               <SortableItem
                 key={step.id}
                 id={step.id}
+                data={{ type: "step" }}
               >
               {(stepHandle) => (
               <Box
@@ -480,10 +502,8 @@ const FormEditor = () => {
                 </Flex>
 
                 <Flex direction="column" alignItems="stretch" gap={2}>
-                  <SortableList
-                    ids={step.fields.map((f) => f.id)}
-                    onReorder={(ids) => patchStep(step.id, { fields: reorderByIds(step.fields, ids) })}
-                  >
+                  <SortableContainer stepId={step.id}>
+                  <SortableGroup ids={step.fields.map((f) => f.id)}>
                   {step.fields.map((field, fieldIndex) => {
                     const flags = fieldFlags(field.id);
                     const isSelected = selection.kind === "field" && selection.fieldId === field.id;
@@ -491,6 +511,7 @@ const FormEditor = () => {
                       <SortableItem
                         key={field.id}
                         id={field.id}
+                        data={{ type: "field", stepId: step.id }}
                       >
                       {(fieldHandle) => (
                       <Box
@@ -510,7 +531,7 @@ const FormEditor = () => {
                               {...fieldHandle.listeners}
                               onClick={(e: React.MouseEvent) => e.stopPropagation()}
                               style={{ cursor: "grab", display: "inline-flex" }}
-                              aria-label={t("editor.drag-field", "Drag to reorder the field")}
+                              aria-label={t("editor.drag-field", "Drag to move the field, including to another step")}
                             >
                               <Drag />
                             </span>
@@ -573,7 +594,8 @@ const FormEditor = () => {
                       </SortableItem>
                     );
                   })}
-                  </SortableList>
+                  </SortableGroup>
+                  </SortableContainer>
                   <Button
                     variant="tertiary"
                     startIcon={<Plus />}
@@ -591,7 +613,8 @@ const FormEditor = () => {
               )}
               </SortableItem>
             ))}
-            </SortableList>
+            </SortableGroup>
+            </SortableBoard>
 
             <Button
               variant="secondary"

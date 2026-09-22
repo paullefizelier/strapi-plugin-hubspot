@@ -295,5 +295,5 @@
   "company.datum.nafLabel": "Libellé NAF",
   "company.datum.headcount": "Tranche d'effectif",
   "editor.drag-step": "Glisser pour réordonner l'étape",
-  "editor.drag-field": "Glisser pour réordonner le champ"
+  "editor.drag-field": "Glisser pour déplacer le champ, y compris vers une autre étape"
 }
