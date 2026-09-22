@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.16.0 — 2026-09-22
+
+### Added — submission policies
+The plugin no longer assumes one HubSpot workflow. **Settings → HubSpot**
+(and `forms.*` in `config/plugins.ts`) now expose three independent choices:
+
+- **`submissionMode`** (`auto` / `forms` / `crm`): native marketing-form
+  conversions when a GUID is linked, CRM upsert only, or automatic.
+- **`writeExtraProperties`** (default `true`): after a Forms API conversion,
+  leftover mapped contact fields still land on the contact via CRM upsert.
+- **`syncFieldsOnPublish`** (default `false`): on publish, PATCH missing
+  mapped contact fields onto the linked HubSpot form. Off so HubSpot-first
+  installs aren't mutated. CRM properties are never created.
+
 ## 0.15.0 — 2026-09-21
 
 ### Added — account settings in the admin

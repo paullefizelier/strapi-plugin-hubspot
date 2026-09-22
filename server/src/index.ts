@@ -62,10 +62,20 @@ const config = {
     //    submissions go through the marketing Forms API);
     //  - defaultFormId: portal-wide marketing form GUID when a builder form
     //    doesn't set its own — swap with the portal at production cutover.
+    //  - submissionMode / writeExtraProperties / syncFieldsOnPublish: see
+    //    Settings → HubSpot; each install picks its HubSpot will.
     forms: {
       companyFromDomain: true,
       timelineNote: true,
       defaultFormId: "",
+      // How submissions reach HubSpot. `auto` = Forms API when a GUID is set,
+      // else CRM upsert. `crm` skips conversions. `forms` prefers the Forms API.
+      submissionMode: "auto" as "auto" | "crm" | "forms",
+      // After a conversion, CRM-write mapped contact props the HubSpot form dropped.
+      writeExtraProperties: true,
+      // On publish, PATCH missing mapped contact fields onto the HubSpot form.
+      // Off by default: HubSpot-first installs must not have Strapi mutate forms.
+      syncFieldsOnPublish: false,
       // Per-IP brakes on the public routes; 0 disables one.
       rateLimit: { submitPerMinute: 6, searchPerMinute: 30 },
     },
@@ -310,7 +320,17 @@ const controllers = {
       ctx.body = { ...settings, forms };
     },
     async update(ctx: {
-      request: { body?: { apiKey?: string; portalId?: string; region?: string; defaultFormId?: string } };
+      request: {
+        body?: {
+          apiKey?: string;
+          portalId?: string;
+          region?: string;
+          defaultFormId?: string;
+          submissionMode?: string;
+          writeExtraProperties?: boolean;
+          syncFieldsOnPublish?: boolean;
+        };
+      };
       body: unknown;
     }) {
       await patchStoredSettings(strapi, ctx.request.body ?? {});

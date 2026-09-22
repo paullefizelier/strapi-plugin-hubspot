@@ -4,6 +4,7 @@ import {
   Badge,
   Box,
   Button,
+  Checkbox,
   Field,
   Flex,
   Loader,
@@ -33,6 +34,8 @@ interface HubspotFormOption {
   name: string;
 }
 
+type SubmissionMode = "auto" | "crm" | "forms";
+
 interface Settings {
   configured: boolean;
   keySource: SettingSource;
@@ -43,6 +46,9 @@ interface Settings {
   portalSource: SettingSource;
   regionSource: SettingSource;
   formSource: SettingSource;
+  submissionMode?: SubmissionMode;
+  writeExtraProperties?: boolean;
+  syncFieldsOnPublish?: boolean;
   forms?: HubspotFormOption[];
 }
 
@@ -56,6 +62,9 @@ const HubspotSettings = () => {
   const [portalId, setPortalId] = React.useState("");
   const [region, setRegion] = React.useState("eu1");
   const [defaultFormId, setDefaultFormId] = React.useState("");
+  const [submissionMode, setSubmissionMode] = React.useState<SubmissionMode>("auto");
+  const [writeExtraProperties, setWriteExtraProperties] = React.useState(true);
+  const [syncFieldsOnPublish, setSyncFieldsOnPublish] = React.useState(false);
   const [forms, setForms] = React.useState<HubspotFormOption[]>([]);
   const [busy, setBusy] = React.useState(false);
   const [feedback, setFeedback] = React.useState<{ tone: "success" | "danger"; text: string } | null>(
@@ -70,6 +79,9 @@ const HubspotSettings = () => {
     setPortalId(data.portalId ?? "");
     setRegion(data.region || "eu1");
     setDefaultFormId(data.defaultFormId ?? "");
+    setSubmissionMode(data.submissionMode === "crm" || data.submissionMode === "forms" ? data.submissionMode : "auto");
+    setWriteExtraProperties(data.writeExtraProperties !== false);
+    setSyncFieldsOnPublish(data.syncFieldsOnPublish === true);
     setForms(Array.isArray(data.forms) ? data.forms : []);
   };
 
@@ -94,6 +106,9 @@ const HubspotSettings = () => {
         portalId,
         region,
         defaultFormId,
+        submissionMode,
+        writeExtraProperties,
+        syncFieldsOnPublish,
       });
       setApiKey("");
       await load();
@@ -302,6 +317,80 @@ const HubspotSettings = () => {
               <Field.Hint />
               {sourceHint(settings.formSource)}
             </Field.Root>
+
+            <Typography variant="delta">
+              {t("settings.policy.title", "How submissions reach HubSpot")}
+            </Typography>
+            <Typography variant="pi" textColor="neutral600">
+              {t(
+                "settings.policy.hint",
+                "Pick the policy that matches this portal. Defaults stay safe for every install: conversions when a form is linked, leftover answers still written on the contact, HubSpot forms never mutated unless you ask.",
+              )}
+            </Typography>
+
+            <Field.Root
+              name="submissionMode"
+              hint={t(
+                "settings.mode.hint",
+                "Automatic uses the marketing form when one is linked, otherwise a CRM upsert. CRM-only never counts as a conversion. Forms-only prefers the Forms API and falls back to the CRM if HubSpot refuses the submit.",
+              )}
+            >
+              <Field.Label>{t("settings.mode.label", "Submission path")}</Field.Label>
+              <SingleSelect
+                value={submissionMode}
+                onChange={(value: string | number) => {
+                  const next = String(value);
+                  if (next === "crm" || next === "forms" || next === "auto") setSubmissionMode(next);
+                }}
+              >
+                <SingleSelectOption value="auto">
+                  {t("settings.mode.auto", "Automatic — form conversion if linked, else CRM")}
+                </SingleSelectOption>
+                <SingleSelectOption value="forms">
+                  {t("settings.mode.forms", "Marketing form — native HubSpot conversions")}
+                </SingleSelectOption>
+                <SingleSelectOption value="crm">
+                  {t("settings.mode.crm", "CRM only — upsert the contact, no form conversion")}
+                </SingleSelectOption>
+              </SingleSelect>
+              <Field.Hint />
+            </Field.Root>
+
+            <Checkbox
+              checked={writeExtraProperties}
+              onCheckedChange={(checked: boolean | "indeterminate") =>
+                setWriteExtraProperties(checked === true)
+              }
+            >
+              {t(
+                "settings.extra.label",
+                "After a conversion, also write mapped contact fields that the HubSpot form doesn't have",
+              )}
+            </Checkbox>
+            <Typography variant="pi" textColor="neutral600">
+              {t(
+                "settings.extra.hint",
+                "The Forms API drops unknown fields (they 400 the submit). With this on, leftovers still land on the contact. Turn it off if HubSpot must only receive what the marketing form declares.",
+              )}
+            </Typography>
+
+            <Checkbox
+              checked={syncFieldsOnPublish}
+              onCheckedChange={(checked: boolean | "indeterminate") =>
+                setSyncFieldsOnPublish(checked === true)
+              }
+            >
+              {t(
+                "settings.sync.label",
+                "On publish, add mapped contact fields that are missing on the HubSpot form",
+              )}
+            </Checkbox>
+            <Typography variant="pi" textColor="neutral600">
+              {t(
+                "settings.sync.hint",
+                "Strapi-first installs: a field added here appears on the HubSpot form next publish. HubSpot-first installs should leave this off — importing a form already carries its fields. Properties themselves are never created; map to ones that exist in the portal.",
+              )}
+            </Typography>
           </Flex>
         </Box>
 

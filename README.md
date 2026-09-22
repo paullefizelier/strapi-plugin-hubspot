@@ -44,14 +44,25 @@ Permissions**):
 | `GET` | `/api/hubspot/forms/:slug?locale=` | The published form — meta, steps, fields, conditions. The CRM mapping is stripped: the browser never learns your property names |
 | `POST` | `/api/hubspot/forms/:slug/submit` | Validates (bounds, conditions, required), maps server-side, syncs HubSpot, stores the submission |
 
-The submit pipeline, in order: HubSpot **Forms API** (native conversion —
-Original Source, workflows, lead-center notifications) when a marketing form
-GUID is set on the builder form or via `forms.defaultFormId`; the visitor's
-`hutk` is forwarded so attribution sticks. Then the contact is looked up by
-email and, when the address is on a corporate domain, the company is
-found-or-created and associated. A CRM contact upsert is the **fallback**
-when no GUID is configured — it does not count as a form conversion.
-Timeline notes are opt-in and only used on that fallback.
+The submit pipeline is a **policy**, not a single path. Settings → HubSpot
+(or `forms.*` in `config/plugins.ts`) pick how this install talks to HubSpot —
+so a portal that wants native conversions and a portal that only wants CRM
+upserts can share the same plugin:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `forms.submissionMode` | `auto` | `auto`: Forms API when a marketing GUID is linked, else CRM upsert. `forms`: always try the Forms API. `crm`: never count as a conversion |
+| `forms.writeExtraProperties` | `true` | After a conversion, CRM-write mapped contact fields the HubSpot form dropped (they 400 the Forms API) |
+| `forms.syncFieldsOnPublish` | `false` | On publish, PATCH missing mapped **contact** fields onto the HubSpot form. Off by default so HubSpot-first installs aren't mutated |
+
+The visitor's `hutk` is forwarded so attribution sticks. Then the contact is
+looked up by email and, when the address is on a corporate domain, the company
+is found-or-created and associated. Timeline notes are opt-in and only used
+on the CRM-upsert path.
+
+CRM properties are **never created**. Map to properties that already exist in
+the portal; opting into field sync only adds form fields that point at those
+properties.
 
 Portal id, region and form GUIDs are configuration. A test portal today,
 production tomorrow: swap `portalId` / `region` / the GUID, no code change.
@@ -66,6 +77,9 @@ hubspot: {
       companyFromDomain: true, // Company by corporate domain + association
       timelineNote: false,     // recap note on the CRM-upsert fallback only
       defaultFormId: env("HUBSPOT_DEFAULT_FORM_ID", ""),
+      submissionMode: "auto",  // auto | forms | crm
+      writeExtraProperties: true,
+      syncFieldsOnPublish: false,
     },
   },
 }
@@ -365,11 +379,12 @@ its equivalent per object you send to).
 
 ### A settings screen
 
-**Settings → HubSpot** holds the private app token **and** the HubSpot account
-that receives conversions: portal id, region (`eu1` / `na1`), and the default
-marketing form (picked from the connected portal). Values saved here override
-`config/plugins.ts` and env — switching test → production is an admin change,
-not a deploy.
+**Settings → HubSpot** holds the private app token, the HubSpot account that
+receives conversions (portal id, region, default marketing form), **and** the
+submission policy: conversion vs CRM upsert, leftover contact writes, form
+field sync on publish. Values saved here override `config/plugins.ts` and env
+— switching test → production, or switching HubSpot-first ↔ Strapi-first, is
+an admin change, not a deploy.
 
 The token is stored server-side and never returned to the browser: the UI only
 receives whether a key exists, where it comes from, and its last four

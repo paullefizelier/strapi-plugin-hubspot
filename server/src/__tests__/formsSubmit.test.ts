@@ -48,11 +48,15 @@ function mockFetch({
   companyFound = false,
   noteStatus = 200,
   sirene = () => ({ status: 404, body: {} as unknown }),
+  formShape,
+  formSubmitStatus = 200,
 }: {
   upsertStatus?: (attempt: number) => number;
   companyFound?: boolean;
   noteStatus?: number;
   sirene?: (query: string) => { status: number; body: unknown };
+  formShape?: { fieldGroups?: { fields?: { name?: string }[] }[] };
+  formSubmitStatus?: number;
 } = {}) {
   let upsertAttempts = 0;
   const calls: Call[] = [];
@@ -77,6 +81,15 @@ function mockFetch({
       return respond(res.status, res.body);
     }
 
+    if (parsed.host.includes("hsforms.com")) {
+      return respond(formSubmitStatus, formSubmitStatus < 400 ? {} : { message: "bad form" });
+    }
+    if (path.startsWith("/marketing/v3/forms/")) {
+      return respond(200, formShape ?? { fieldGroups: [{ fields: [{ name: "email" }] }] });
+    }
+    if (path.endsWith("/contacts/search")) {
+      return respond(200, { results: [{ id: "contact-1" }] });
+    }
     if (path.endsWith("/contacts/batch/upsert")) {
       upsertAttempts += 1;
       const status = upsertStatus(upsertAttempts);
@@ -104,7 +117,15 @@ function mockFetch({
   return { calls };
 }
 
-function makeStrapi({ apiKey = "key", formsConfig = {} as Record<string, unknown> } = {}) {
+function makeStrapi({
+  apiKey = "key",
+  formsConfig = {} as Record<string, unknown>,
+  stored = {},
+}: {
+  apiKey?: string;
+  formsConfig?: Record<string, unknown>;
+  stored?: Record<string, unknown>;
+} = {}) {
   const rows: Record<string, Record<string, unknown>[]> = {};
   let seq = 0;
   const documentsFor = (uid: string) => {
@@ -127,7 +148,7 @@ function makeStrapi({ apiKey = "key", formsConfig = {} as Record<string, unknown
     forms: formsConfig,
   };
   const strapi = {
-    store: () => ({ get: async () => (apiKey ? { apiKey } : {}) }),
+    store: () => ({ get: async () => (apiKey ? { apiKey, ...stored } : stored) }),
     plugin: () => ({
       config: (key: string, def: unknown) => config[key] ?? def,
       service: () => submitService,
@@ -584,6 +605,60 @@ describe("forms.submit — company field", () => {
     const search = calls.find((c) => c.path.endsWith("/companies/search"));
     expect(JSON.stringify(search?.body)).toContain("siret_custom");
     expect(JSON.stringify(search?.body)).not.toContain("acme.com");
+  });
+});
+
+describe("forms.submit — hybrid conversion", () => {
+  const GUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+
+  it("posts a native conversion then CRM-writes leftover mapped contact fields", async () => {
+    const { calls } = mockFetch({
+      formShape: { fieldGroups: [{ fields: [{ name: "email" }, { name: "firstname" }] }] },
+    });
+    const { strapi } = makeStrapi({
+      stored: { portalId: "148991818", defaultFormId: GUID, writeExtraProperties: true },
+    });
+    const out = await service(strapi).submit(
+      formEntry,
+      { email: "jane@gmail.com", firstname: "Jane", role: "dev" },
+      { ...meta, hutk: "aabbccddeeff00112233445566778899" },
+    );
+    expect(out).toMatchObject({ ok: true, hubspotSynced: true });
+
+    const conversion = calls.find((c) => c.path.includes("/integration/secure/submit/"));
+    const conversionFields = (conversion?.body as { fields: { name: string }[] }).fields.map(
+      (f) => f.name,
+    );
+    expect(conversionFields).toEqual(["email", "firstname"]);
+    expect(conversion?.body).toMatchObject({
+      context: { hutk: "aabbccddeeff00112233445566778899" },
+    });
+
+    const upsert = calls.find((c) => c.path.endsWith("/contacts/batch/upsert"));
+    const input = (upsert?.body as { inputs: { properties: Record<string, string> }[] }).inputs[0];
+    expect(input.properties).toMatchObject({ email: "jane@gmail.com", hs_role: "dev" });
+    expect(input.properties.firstname).toBeUndefined();
+  });
+
+  it("skips the Forms API entirely in CRM mode even when a GUID is set", async () => {
+    const { calls } = mockFetch();
+    const { strapi } = makeStrapi({
+      stored: { portalId: "148991818", defaultFormId: GUID, submissionMode: "crm" },
+    });
+    await service(strapi).submit(
+      formEntry,
+      { email: "jane@gmail.com", firstname: "Jane", role: "dev" },
+      meta,
+    );
+    expect(calls.some((c) => c.path.includes("/integration/secure/submit/"))).toBe(false);
+    const upsert = calls.find((c) => c.path.endsWith("/contacts/batch/upsert"));
+    expect(
+      (upsert?.body as { inputs: { properties: Record<string, string> }[] }).inputs[0].properties,
+    ).toMatchObject({
+      email: "jane@gmail.com",
+      firstname: "Jane",
+      hs_role: "dev",
+    });
   });
 });
 

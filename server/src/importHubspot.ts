@@ -317,3 +317,26 @@ export async function listHubspotForms(apiKey: string): Promise<HubspotFormSumma
 export async function fetchHubspotForm(apiKey: string, formId: string): Promise<RawHubspotForm> {
   return hsGet<RawHubspotForm>(apiKey, `/marketing/v3/forms/${encodeURIComponent(formId)}`);
 }
+
+/** Replace `fieldGroups` (HubSpot PATCH is a full replacement of that array). */
+export async function patchHubspotForm(
+  apiKey: string,
+  formId: string,
+  body: { fieldGroups: unknown[] },
+): Promise<RawHubspotForm> {
+  const res = await fetch(`${HS_BASE}/marketing/v3/forms/${encodeURIComponent(formId)}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { message?: string };
+    throw Object.assign(new Error(payload.message || `HubSpot ${res.status}`), {
+      status: res.status,
+    });
+  }
+  return (await res.json()) as RawHubspotForm;
+}

@@ -2,14 +2,12 @@
  * The form-builder server side: shaping a published form for the public API,
  * and turning a submission into a HubSpot marketing-form conversion.
  *
- * The pipeline: post the answers to HubSpot's Forms API (native conversion,
- * workflows, original source, lead-center notifications) with the visitor's
- * `hutk`; look the contact back up by email; when the email is on a corporate
- * domain the company is found-or-created by `domain` and associated. A CRM
- * contact upsert is the fallback when no form GUID is configured — it does
- * not count as a form conversion. Timeline notes are opt-in and only used
- * on that fallback. Company sync is best-effort; the form submission is
- * the lead.
+ * The pipeline is a policy the install picks in Settings: native Forms API
+ * conversion (with leftover CRM writes for mapped fields the HubSpot form
+ * dropped), CRM upsert only, or automatic (Forms API when a GUID is linked).
+ * Company find-or-create still runs after a successful submit. Timeline notes
+ * are opt-in and only used on the CRM-upsert path. The form submission is
+ * the lead — a CRM outage never loses it.
  */
 
 import type { Core } from "@strapi/strapi";
@@ -24,6 +22,7 @@ import {
   type CompanyHit,
   type CompanyMap,
 } from "./company";
+import { leftoverContactProps } from "./formSync";
 import {
   filterToFormFields,
   findContactIdByEmail,
@@ -36,7 +35,7 @@ import {
   toHsFields,
 } from "./hsforms";
 import { checkMapping, loadSchema, resolveObjects, type Problem } from "./properties";
-import { resolveAccount, resolveApiKey } from "./settings";
+import { resolveAccount, resolveApiKey, resolvePolicy } from "./settings";
 
 export interface FormEntry {
   name: string;
@@ -578,10 +577,9 @@ export function createFormsService(
     }
 
     // Best-effort HubSpot sync — a CRM outage must never lose the lead.
-    // Prefer the marketing Forms API when a GUID is configured (per-form or
-    // portal default): that is what HubSpot counts as a conversion. CRM
-    // upsert is the fallback for installs that haven't pointed at a form yet.
+    // The install chooses how: Forms API conversions, CRM upsert, or both.
     let usedFormsApi = false;
+    let sentFieldNames: string[] = [];
     if (email && apiKey) {
       const groups = groupByObject(form.definition, resolution.values);
       for (const [object, props] of Object.entries(companyGroups)) {
@@ -589,8 +587,10 @@ export function createFormsService(
       }
       const partition = await partitionBySchema(apiKey, groups);
       rejected = partition.rejected;
+      const contactProps = stringProps(partition.accepted.contact ?? {});
 
       const account = await resolveAccount(strapi);
+      const policy = await resolvePolicy(strapi);
       const portalId = sanitizePortalId(account.portalId);
       const region = account.region || "eu1";
       const ownGuid = typeof form.hubspotFormId === "string" ? form.hubspotFormId.trim() : "";
@@ -600,16 +600,18 @@ export function createFormsService(
           ? account.defaultFormId.trim()
           : "";
 
-      if (portalId && formGuid) {
+      const tryFormsApi = policy.submissionMode !== "crm" && Boolean(portalId && formGuid);
+      if (tryFormsApi && portalId && formGuid) {
         try {
           const shape = await loadFormShape(apiKey, formGuid);
           const fields = filterToFormFields(
-            toHsFields({ ...(stringProps(partition.accepted.contact ?? {})), email }),
+            toHsFields({ ...contactProps, email }),
             shape?.names ?? null,
           );
           if (fields.length && !fields.some((f) => f.name === "email")) {
             fields.unshift({ name: "email", value: email });
           }
+          sentFieldNames = fields.map((f) => f.name);
           const submitted = await submitMarketingForm({
             apiKey,
             portalId,
@@ -653,11 +655,30 @@ export function createFormsService(
           .upsert({
             object: "contact",
             idProperty: "email",
-            properties: { ...(partition.accepted.contact ?? {}), email },
+            properties: { ...contactProps, email },
           });
         if (result.ok) {
           hubspotSynced = true;
           contactId = result.id;
+        }
+      } else if (policy.writeExtraProperties) {
+        const extra = leftoverContactProps(contactProps, sentFieldNames);
+        if (Object.keys(extra).length) {
+          try {
+            const result = await strapi
+              .plugin("hubspot")
+              .service("submit")
+              .upsert({
+                object: "contact",
+                idProperty: "email",
+                properties: { ...extra, email },
+              });
+            if (result.ok) contactId = result.id ?? contactId;
+          } catch (err) {
+            strapi.log.warn(
+              `[hubspot] leftover contact properties failed (conversion OK) — ${(err as Error).message}`,
+            );
+          }
         }
       }
 

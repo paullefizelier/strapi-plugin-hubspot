@@ -251,11 +251,36 @@ const FormEditor = () => {
     setBusy(true);
     setFeedback(null);
     try {
-      await post(`/${PLUGIN_ID}/builder/forms/${documentId}/publish${query}`);
+      const { data } = await post<{
+        ok?: boolean;
+        addedFields?: string[];
+        syncWarning?: string;
+      }>(`/${PLUGIN_ID}/builder/forms/${documentId}/publish${query}`);
       setPublished(true);
       setErrors([]);
       setProblems([]);
-      setFeedback({ tone: "success", text: t("editor.published", "Form published.") });
+      const added = Array.isArray(data?.addedFields) ? data.addedFields.length : 0;
+      if (data?.syncWarning) {
+        setFeedback({
+          tone: "success",
+          text: t(
+            "editor.published-sync-warn",
+            "Form published. HubSpot field sync failed: {error}",
+            { error: data.syncWarning },
+          ),
+        });
+      } else if (added) {
+        setFeedback({
+          tone: "success",
+          text: t(
+            "editor.published-synced",
+            "Form published. {count, plural, one {# field added} other {# fields added}} to the HubSpot form.",
+            { count: added },
+          ),
+        });
+      } else {
+        setFeedback({ tone: "success", text: t("editor.published", "Form published.") });
+      }
     } catch (err) {
       const data = (err as {
         response?: { data?: { errors?: DefinitionError[]; problems?: MappingProblem[] } };

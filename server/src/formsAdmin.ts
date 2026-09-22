@@ -9,10 +9,11 @@
 import type { Core } from "@strapi/strapi";
 import { validateDefinition, type FormDefinition } from "./conditions";
 import { mappingProblems, SUBMISSION_UID, type FormEntry } from "./forms";
+import { isFormGuid, syncFieldsToHubspotForm } from "./hsforms";
 import { convertHubspotForm, fetchHubspotForm, listHubspotForms } from "./importHubspot";
 import { convertLegacyForm, type ImportMap } from "./importLegacy";
 import { loadSchema, resolveObjects, type Problem } from "./properties";
-import { resolveApiKey } from "./settings";
+import { resolveAccount, resolveApiKey, resolvePolicy } from "./settings";
 
 export const FORM_UID = "plugin::hubspot.form";
 
@@ -220,7 +221,37 @@ export function createFormsAdminController(strapi: Core.Strapi) {
         documentId: ctx.params.documentId!,
         locale: ctx.query.locale,
       } as never);
-      ctx.body = { ok: true };
+
+      const policy = await resolvePolicy(strapi);
+      let addedFields: string[] = [];
+      let syncWarning: string | undefined;
+      if (policy.syncFieldsOnPublish) {
+        const { apiKey } = await resolveApiKey(strapi);
+        const account = await resolveAccount(strapi);
+        const ownGuid = typeof entry.hubspotFormId === "string" ? entry.hubspotFormId.trim() : "";
+        const formGuid = isFormGuid(ownGuid)
+          ? ownGuid
+          : isFormGuid(account.defaultFormId)
+            ? account.defaultFormId.trim()
+            : "";
+        if (apiKey && formGuid) {
+          try {
+            addedFields = await syncFieldsToHubspotForm(
+              apiKey,
+              formGuid,
+              entry.definition ?? EMPTY_DEFINITION,
+            );
+          } catch (err) {
+            syncWarning = (err as Error).message;
+            strapi.log.warn(`[hubspot] field sync on publish failed — ${syncWarning}`);
+          }
+        }
+      }
+      ctx.body = {
+        ok: true,
+        ...(addedFields.length ? { addedFields } : {}),
+        ...(syncWarning ? { syncWarning } : {}),
+      };
     },
 
     async unpublish(ctx: Ctx) {

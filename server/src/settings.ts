@@ -20,11 +20,25 @@ export const ENV_DEFAULT_FORM = "HUBSPOT_DEFAULT_FORM_ID";
 
 export type SettingSource = "settings" | "config" | "env" | null;
 
+export type SubmissionMode = "auto" | "crm" | "forms";
+
 export interface StoredSettings {
   apiKey?: string;
   portalId?: string;
   region?: string;
   defaultFormId?: string;
+  submissionMode?: SubmissionMode;
+  writeExtraProperties?: boolean;
+  syncFieldsOnPublish?: boolean;
+}
+
+export interface HubspotPolicy {
+  /** How submissions reach HubSpot. `auto` uses Forms API when a GUID is set. */
+  submissionMode: SubmissionMode;
+  /** After a Forms API conversion, CRM-write mapped contact props the form dropped. */
+  writeExtraProperties: boolean;
+  /** On publish, PATCH missing mapped contact fields onto the HubSpot form. */
+  syncFieldsOnPublish: boolean;
 }
 
 export interface PublicSettings {
@@ -39,6 +53,9 @@ export interface PublicSettings {
   portalSource: SettingSource;
   regionSource: SettingSource;
   formSource: SettingSource;
+  submissionMode: SubmissionMode;
+  writeExtraProperties: boolean;
+  syncFieldsOnPublish: boolean;
 }
 
 export interface HubspotAccount {
@@ -73,6 +90,43 @@ const first = (
   return { value: fallback, source: null };
 };
 
+const MODES = new Set<SubmissionMode>(["auto", "crm", "forms"]);
+
+export function asSubmissionMode(value: unknown): SubmissionMode | undefined {
+  return typeof value === "string" && MODES.has(value as SubmissionMode)
+    ? (value as SubmissionMode)
+    : undefined;
+}
+
+function asBool(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+interface FormsCfg {
+  defaultFormId?: string;
+  submissionMode?: unknown;
+  writeExtraProperties?: unknown;
+  syncFieldsOnPublish?: unknown;
+}
+
+function formsCfg(strapi: Core.Strapi): FormsCfg {
+  return (strapi.plugin("hubspot").config("forms", {}) as FormsCfg) ?? {};
+}
+
+export function policyFrom(stored: StoredSettings, forms: FormsCfg): HubspotPolicy {
+  return {
+    submissionMode: asSubmissionMode(stored.submissionMode) ?? asSubmissionMode(forms.submissionMode) ?? "auto",
+    writeExtraProperties:
+      asBool(stored.writeExtraProperties) ?? asBool(forms.writeExtraProperties) ?? true,
+    syncFieldsOnPublish:
+      asBool(stored.syncFieldsOnPublish) ?? asBool(forms.syncFieldsOnPublish) ?? false,
+  };
+}
+
+export async function resolvePolicy(strapi: Core.Strapi): Promise<HubspotPolicy> {
+  return policyFrom(await getStoredSettings(strapi), formsCfg(strapi));
+}
+
 export async function resolveApiKey(
   strapi: Core.Strapi,
 ): Promise<{ apiKey: string; source: SettingSource }> {
@@ -100,7 +154,7 @@ export async function resolveAccount(strapi: Core.Strapi): Promise<HubspotAccoun
 
 async function resolveAccountSources(strapi: Core.Strapi): Promise<PublicSettings> {
   const stored = await getStoredSettings(strapi);
-  const formsCfg = (strapi.plugin("hubspot").config("forms", {}) as { defaultFormId?: string }) ?? {};
+  const forms = formsCfg(strapi);
   const portal = first([
     { value: stored.portalId, source: "settings" },
     { value: strapi.plugin("hubspot").config("portalId", "") as string, source: "config" },
@@ -116,10 +170,11 @@ async function resolveAccountSources(strapi: Core.Strapi): Promise<PublicSetting
   );
   const form = first([
     { value: stored.defaultFormId, source: "settings" },
-    { value: formsCfg.defaultFormId, source: "config" },
+    { value: forms.defaultFormId, source: "config" },
     { value: process.env[ENV_DEFAULT_FORM], source: "env" },
   ]);
   const { apiKey, source: keySource } = await resolveApiKey(strapi);
+  const policy = policyFrom(stored, forms);
   return {
     configured: Boolean(apiKey),
     keySource,
@@ -130,6 +185,7 @@ async function resolveAccountSources(strapi: Core.Strapi): Promise<PublicSetting
     portalSource: portal.source,
     regionSource: region.source,
     formSource: form.source,
+    ...policy,
   };
 }
 
@@ -137,11 +193,18 @@ export async function publicSettings(strapi: Core.Strapi): Promise<PublicSetting
   return resolveAccountSources(strapi);
 }
 
+export interface SettingsPatch {
+  apiKey?: string;
+  portalId?: unknown;
+  region?: unknown;
+  defaultFormId?: unknown;
+  submissionMode?: unknown;
+  writeExtraProperties?: unknown;
+  syncFieldsOnPublish?: unknown;
+}
+
 /** Merge a PATCH-like body into the store without dropping the saved key. */
-export async function patchStoredSettings(
-  strapi: Core.Strapi,
-  body: { apiKey?: string; portalId?: unknown; region?: unknown; defaultFormId?: unknown },
-): Promise<void> {
+export async function patchStoredSettings(strapi: Core.Strapi, body: SettingsPatch): Promise<void> {
   const current = await getStoredSettings(strapi);
   const next: StoredSettings = { ...current };
   if (typeof body.apiKey === "string" && body.apiKey.trim()) {
@@ -153,6 +216,16 @@ export async function patchStoredSettings(
     next.region = region || "eu1";
   }
   if ("defaultFormId" in body) next.defaultFormId = String(body.defaultFormId ?? "").trim();
+  if ("submissionMode" in body) {
+    const mode = asSubmissionMode(body.submissionMode);
+    if (mode) next.submissionMode = mode;
+  }
+  if ("writeExtraProperties" in body && typeof body.writeExtraProperties === "boolean") {
+    next.writeExtraProperties = body.writeExtraProperties;
+  }
+  if ("syncFieldsOnPublish" in body && typeof body.syncFieldsOnPublish === "boolean") {
+    next.syncFieldsOnPublish = body.syncFieldsOnPublish;
+  }
   await setStoredSettings(strapi, next);
 }
 

@@ -11,7 +11,9 @@
  * production tomorrow, no code change.
  */
 
-import { fetchHubspotForm } from "./importHubspot";
+import { appendFieldGroups, missingMappedFields } from "./formSync";
+import type { FormDefinition } from "./conditions";
+import { fetchHubspotForm, patchHubspotForm } from "./importHubspot";
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PORTAL = /^\d{1,12}$/;
@@ -107,6 +109,11 @@ const shapeCache = new Map<
   string,
   { at: number; names: Set<string>; hasLegalConsent: boolean }
 >();
+
+export function clearFormShapeCache(formGuid?: string): void {
+  if (formGuid) shapeCache.delete(formGuid);
+  else shapeCache.clear();
+}
 
 export async function loadFormShape(
   apiKey: string,
@@ -234,4 +241,24 @@ export async function submitMarketingForm(
     if (email) result = await postForm(url, input.apiKey, { ...base, fields: [email] });
   }
   return result;
+}
+
+/**
+ * Opt-in: add mapped contact fields that the HubSpot form doesn't already
+ * declare. Never creates CRM properties — only form fields pointing at ones
+ * that already exist. Returns the property names that were added.
+ */
+export async function syncFieldsToHubspotForm(
+  apiKey: string,
+  formGuid: string,
+  definition: FormDefinition,
+): Promise<string[]> {
+  const raw = await fetchHubspotForm(apiKey, formGuid);
+  const extra = missingMappedFields(definition, formFieldNames(raw));
+  if (!extra.length) return [];
+  await patchHubspotForm(apiKey, formGuid, {
+    fieldGroups: appendFieldGroups(raw.fieldGroups ?? [], extra),
+  });
+  clearFormShapeCache(formGuid);
+  return extra.map((field) => field.property);
 }
