@@ -67,10 +67,10 @@ export function toHsFields(props: Record<string, string>): { name: string; value
     .map(([name, value]) => ({ name, value }));
 }
 
-export function filterToFormFields(
-  fields: { name: string; value: string }[],
+export function filterToFormFields<T extends { name: string }>(
+  fields: T[],
   allowed: Set<string> | null,
-): { name: string; value: string }[] {
+): T[] {
   if (!allowed) return fields;
   return fields.filter((field) => allowed.has(field.name));
 }
@@ -104,20 +104,76 @@ export interface CommunicationConsent {
   text: string;
 }
 
+export interface FormShapeField {
+  name: string;
+  objectTypeId: string;
+  required: boolean;
+}
+
 export interface FormShape {
   names: Set<string>;
   required: Set<string>;
+  fields: FormShapeField[];
   hasLegalConsent: boolean;
+  legalType?: string;
+  lawfulBasis?: "LEAD" | "CUSTOMER";
+  subscriptionTypeIds: number[];
+  privacyText?: string;
   captcha: boolean;
   consentToProcessText?: string;
   communications: CommunicationConsent[];
 }
 
+const OBJECT_BAG: Record<string, string> = {
+  "0-1": "contact",
+  "0-2": "company",
+};
+
+export function formShapeFields(raw: {
+  fieldGroups?: { fields?: { name?: string; required?: boolean; objectTypeId?: string }[] }[];
+}): FormShapeField[] {
+  const fields: FormShapeField[] = [];
+  for (const group of raw.fieldGroups ?? []) {
+    for (const field of group.fields ?? []) {
+      if (!field.name) continue;
+      fields.push({
+        name: field.name,
+        objectTypeId: field.objectTypeId?.trim() || "0-1",
+        required: Boolean(field.required),
+      });
+    }
+  }
+  return fields;
+}
+
+/** Values HubSpot declared on the marketing form, with the right objectTypeId. */
+export function fieldsForHubspotForm(
+  bags: Record<string, Record<string, string>>,
+  shape: FormShape | null | undefined,
+  extra: Record<string, string> = {},
+): { name: string; value: string; objectTypeId: string }[] {
+  const contact = { ...(bags.contact ?? {}), ...extra };
+  if (!shape?.fields.length) {
+    return toHsFields(contact).map((field) => ({ ...field, objectTypeId: "0-1" }));
+  }
+  const out: { name: string; value: string; objectTypeId: string }[] = [];
+  for (const field of shape.fields) {
+    const bagName = OBJECT_BAG[field.objectTypeId] || "contact";
+    const value = bags[bagName]?.[field.name] ?? contact[field.name];
+    if (!value) continue;
+    out.push({ name: field.name, value, objectTypeId: field.objectTypeId || "0-1" });
+  }
+  return out;
+}
+
 export function parseFormShape(raw: {
-  fieldGroups?: { fields?: { name?: string; required?: boolean }[] }[];
-  configuration?: { captchaEnabled?: boolean };
+  fieldGroups?: { fields?: { name?: string; required?: boolean; objectTypeId?: string }[] }[];
+  configuration?: { captchaEnabled?: boolean; recaptchaEnabled?: boolean };
   legalConsentOptions?: {
     type?: string;
+    lawfulBasis?: string;
+    privacyText?: string;
+    subscriptionTypeIds?: (number | string)[];
     consentToProcessText?: string;
     communicationsCheckboxes?: {
       label?: string;
@@ -128,9 +184,8 @@ export function parseFormShape(raw: {
   } | null;
 }): FormShape {
   const legal = raw.legalConsentOptions;
-  const hasLegalConsent = Boolean(
-    legal && typeof legal === "object" && legal.type && legal.type !== "none",
-  );
+  const legalType = typeof legal?.type === "string" ? legal.type : undefined;
+  const hasLegalConsent = Boolean(legalType && legalType !== "none");
   const communications: CommunicationConsent[] = [];
   for (const box of legal?.communicationsCheckboxes ?? []) {
     const id = Number(box.subscriptionTypeId ?? box.communicationTypeId);
@@ -140,12 +195,24 @@ export function parseFormShape(raw: {
       text: String(box.label || box.text || "").trim() || "I agree to receive communications.",
     });
   }
+  const subscriptionTypeIds = (legal?.subscriptionTypeIds ?? [])
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id) && id > 0);
   const consentToProcessText = legal?.consentToProcessText?.trim();
+  const privacyText = legal?.privacyText?.trim();
+  const lawfulRaw = String(legal?.lawfulBasis || "").toUpperCase();
+  const fields = formShapeFields(raw);
   return {
-    names: new Set(formFieldNames(raw)),
-    required: new Set(formRequiredNames(raw)),
+    names: new Set(fields.map((field) => field.name)),
+    required: new Set(fields.filter((field) => field.required).map((field) => field.name)),
+    fields,
     hasLegalConsent,
-    captcha: raw.configuration?.captchaEnabled === true,
+    ...(legalType ? { legalType } : {}),
+    lawfulBasis: lawfulRaw.includes("CUSTOMER") ? "CUSTOMER" : "LEAD",
+    subscriptionTypeIds,
+    ...(privacyText ? { privacyText } : {}),
+    captcha:
+      raw.configuration?.recaptchaEnabled === true || raw.configuration?.captchaEnabled === true,
     ...(consentToProcessText ? { consentToProcessText } : {}),
     communications,
   };
@@ -158,15 +225,37 @@ export function canRetryEmailOnly(required: Iterable<string> | undefined): boole
 }
 
 export function buildLegalConsent(
-  shape: Pick<FormShape, "hasLegalConsent" | "communications" | "consentToProcessText"> | null | undefined,
+  shape: Pick<
+    FormShape,
+    | "hasLegalConsent"
+    | "legalType"
+    | "lawfulBasis"
+    | "subscriptionTypeIds"
+    | "privacyText"
+    | "communications"
+    | "consentToProcessText"
+  > | null | undefined,
   given: boolean,
   fallbackText?: string,
 ): Record<string, unknown> | undefined {
   if (!given) return undefined;
   if (shape && !shape.hasLegalConsent) return undefined;
+  const fallback = fallbackText?.trim() || DEFAULT_CONSENT_TEXT;
+  if (shape?.legalType === "legitimate_interest") {
+    const subscriptionTypeId = shape.subscriptionTypeIds[0];
+    if (!subscriptionTypeId) return undefined;
+    return {
+      legitimateInterest: {
+        value: true,
+        subscriptionTypeId,
+        legalBasis: shape.lawfulBasis || "LEAD",
+        text: shape.privacyText?.trim() || fallback,
+      },
+    };
+  }
   const consent: Record<string, unknown> = {
     consentToProcess: true,
-    text: shape?.consentToProcessText?.trim() || fallbackText?.trim() || DEFAULT_CONSENT_TEXT,
+    text: shape?.consentToProcessText?.trim() || fallback,
   };
   if (shape?.communications.length) {
     consent.communications = shape.communications.map((item) => ({

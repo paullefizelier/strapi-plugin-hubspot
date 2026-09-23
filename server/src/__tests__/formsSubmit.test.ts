@@ -3,6 +3,7 @@ import type { Core } from "@strapi/strapi";
 import type { FormDefinition } from "../conditions";
 import { createFormsService, SUBMISSION_UID, type FormEntry } from "../forms";
 import { clearCache } from "../properties";
+import { clearFormShapeCache } from "../hsforms";
 import { createSubmitService } from "../submit";
 
 /**
@@ -214,7 +215,10 @@ const service = (strapi: Core.Strapi) => createFormsService(strapi, { sleep: asy
 
 const meta = { pagePath: "/entreprises", pageUrl: "https://x.co/entreprises", originLabel: "Intérim" };
 
-beforeEach(() => clearCache());
+beforeEach(() => {
+  clearCache();
+  clearFormShapeCache();
+});
 afterEach(() => vi.unstubAllGlobals());
 
 describe("forms.submit", () => {
@@ -646,6 +650,38 @@ describe("forms.submit — hybrid conversion", () => {
     const input = (upsert?.body as { inputs: { properties: Record<string, string> }[] }).inputs[0];
     expect(input.properties).toMatchObject({ email: "jane@gmail.com", hs_role: "dev" });
     expect(input.properties.firstname).toBeUndefined();
+  });
+
+  it("posts company fields on the conversion with objectTypeId 0-2", async () => {
+    const { calls } = mockFetch({
+      formShape: {
+        fieldGroups: [
+          {
+            fields: [
+              { name: "email", objectTypeId: "0-1" },
+              { name: "name", objectTypeId: "0-2" },
+            ],
+          },
+        ],
+      },
+      sirene: () => ({ status: 200, body: sirenePayload }),
+    });
+    const { strapi } = makeStrapi({
+      stored: { portalId: "148991818" },
+    });
+    await service(strapi).submit(
+      { ...companyForm, hubspotFormId: GUID },
+      { email: "jane@gmail.com", entreprise: "Test Corp", entreprise__siret: SIRET },
+      { ...meta, consent: true },
+    );
+    const conversion = calls.find((c) => c.path.includes("/integration/secure/submit/"));
+    const fields = (conversion?.body as { fields: { name: string; objectTypeId?: string }[] }).fields;
+    expect(fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "email", objectTypeId: "0-1" }),
+        expect.objectContaining({ name: "name", value: "TEST CORP", objectTypeId: "0-2" }),
+      ]),
+    );
   });
 
   it("keeps the CRM fallback but records the Forms API error when a linked form refuses the conversion", async () => {

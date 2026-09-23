@@ -25,7 +25,7 @@ import {
 } from "./company";
 import { leftoverContactProps } from "./formSync";
 import {
-  filterToFormFields,
+  fieldsForHubspotForm,
   findContactIdByEmail,
   isFormGuid,
   loadFormShape,
@@ -33,7 +33,6 @@ import {
   sanitizeIp,
   sanitizePortalId,
   submitMarketingForm,
-  toHsFields,
 } from "./hsforms";
 import { checkMapping, loadSchema, resolveObjects, type Problem } from "./properties";
 import { resolveAccount, resolveApiKey, resolvePolicy } from "./settings";
@@ -606,12 +605,16 @@ export function createFormsService(
       if (tryFormsApi && portalId && formGuid) {
         try {
           const shape = await loadFormShape(apiKey, formGuid);
-          const fields = filterToFormFields(
-            toHsFields({ ...contactProps, email }),
-            shape?.names ?? null,
+          const fields = fieldsForHubspotForm(
+            {
+              contact: contactProps,
+              company: stringProps(partition.accepted.company ?? {}),
+            },
+            shape,
+            { email },
           );
           if (fields.length && !fields.some((f) => f.name === "email")) {
-            fields.unshift({ name: "email", value: email });
+            fields.unshift({ name: "email", value: email, objectTypeId: "0-1" });
           }
           sentFieldNames = fields.map((f) => f.name);
           const submitted = await submitMarketingForm({
@@ -619,7 +622,7 @@ export function createFormsService(
             portalId,
             formGuid,
             region,
-            fields: fields.length ? fields : [{ name: "email", value: email }],
+            fields: fields.length ? fields : [{ name: "email", value: email, objectTypeId: "0-1" }],
             context: {
               hutk: sanitizeHutk(meta.hutk),
               pageUri: typeof meta.pageUrl === "string" ? meta.pageUrl : undefined,

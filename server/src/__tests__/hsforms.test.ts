@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   filterToFormFields,
+  fieldsForHubspotForm,
   formFieldNames,
   formsHost,
   formsSubmitUrl,
@@ -92,12 +93,18 @@ describe("form shape / consent", () => {
     ]);
   });
 
+  it("treats HubSpot's recaptchaEnabled flag as CAPTCHA (the Forms API field name)", () => {
+    expect(parseFormShape({ configuration: { recaptchaEnabled: true } }).captcha).toBe(true);
+    expect(parseFormShape({ configuration: { recaptchaEnabled: false } }).captcha).toBe(false);
+  });
+
   it("builds HubSpot legalConsentOptions with communications when the form has a GDPR block", () => {
     const legal = buildLegalConsent(
       {
         hasLegalConsent: true,
         consentToProcessText: "Traitement OK",
         communications: [{ subscriptionTypeId: 7, text: "News" }],
+        subscriptionTypeIds: [],
       },
       true,
     );
@@ -114,5 +121,48 @@ describe("form shape / consent", () => {
     expect(canRetryEmailOnly(["email"])).toBe(true);
     expect(canRetryEmailOnly(["email", "firstname"])).toBe(false);
     expect(canRetryEmailOnly([])).toBe(true);
+  });
+
+  it("builds legitimateInterest consent for HubSpot forms that use that GDPR mode", () => {
+    const shape = parseFormShape({
+      legalConsentOptions: {
+        type: "legitimate_interest",
+        lawfulBasis: "lead",
+        privacyText: "Intérêt légitime.",
+        subscriptionTypeIds: [99],
+      },
+    });
+    expect(shape.hasLegalConsent).toBe(true);
+    expect(shape.legalType).toBe("legitimate_interest");
+    expect(buildLegalConsent(shape, true)).toEqual({
+      legitimateInterest: {
+        value: true,
+        subscriptionTypeId: 99,
+        legalBasis: "LEAD",
+        text: "Intérêt légitime.",
+      },
+    });
+  });
+
+  it("sends company properties with objectTypeId 0-2 when the HubSpot form declares them", () => {
+    const shape = parseFormShape({
+      fieldGroups: [
+        {
+          fields: [
+            { name: "email", objectTypeId: "0-1", required: true },
+            { name: "name", objectTypeId: "0-2", required: true },
+          ],
+        },
+      ],
+    });
+    expect(
+      fieldsForHubspotForm(
+        { contact: { email: "a@b.co" }, company: { name: "Acme" } },
+        shape,
+      ),
+    ).toEqual([
+      { name: "email", value: "a@b.co", objectTypeId: "0-1" },
+      { name: "name", value: "Acme", objectTypeId: "0-2" },
+    ]);
   });
 });

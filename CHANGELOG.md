@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.16.6 — 2026-09-23
+
+### Fixed
+- Native conversions against HubSpot forms that use **legitimate interest**
+  (not explicit consent) and **company fields** (`objectTypeId` `0-2`) were
+  refused by the Forms API, so only a CRM note appeared. The submit now sends
+  `legalConsentOptions.legitimateInterest` and the company properties the
+  marketing form actually declares.
+
 ## 0.16.5 — 2026-09-23
 
 ### Fixed
