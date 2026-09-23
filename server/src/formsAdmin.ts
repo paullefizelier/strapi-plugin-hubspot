@@ -154,7 +154,7 @@ export function createFormsAdminController(strapi: Core.Strapi) {
         locale: ctx.query.locale,
         status: "published",
       } as never);
-      ctx.body = { form: entry, published: Boolean(published) };
+      ctx.body = { form: entry, published: Boolean(published), publishedHubspotFormId: (published as { hubspotFormId?: string } | null)?.hubspotFormId ?? null };
     },
 
     async create(ctx: Ctx) {

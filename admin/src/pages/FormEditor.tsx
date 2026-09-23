@@ -75,6 +75,7 @@ const FormEditor = () => {
 
   const [entry, setEntry] = React.useState<FormEntryDto | null>(null);
   const [published, setPublished] = React.useState(false);
+  const [publishedHubspotFormId, setPublishedHubspotFormId] = React.useState<string | null>(null);
   const [locales, setLocales] = React.useState<AdminLocale[]>([]);
   const [selection, setSelection] = React.useState<Selection>({ kind: "form" });
   const [dirty, setDirty] = React.useState(false);
@@ -118,13 +119,14 @@ const FormEditor = () => {
     setSelection({ kind: "form" });
     setErrors([]);
     setProblems([]);
-    get<{ form: FormEntryDto; published: boolean }>(
+    get<{ form: FormEntryDto; published: boolean; publishedHubspotFormId?: string | null }>(
       `/${PLUGIN_ID}/builder/forms/${documentId}${query}`,
     )
       .then(({ data }) => {
         if (cancelled) return;
         setEntry(data.form);
         setPublished(data.published);
+        setPublishedHubspotFormId(data.publishedHubspotFormId ?? null);
         setDirty(false);
       })
       .catch(async () => {
@@ -265,6 +267,7 @@ const FormEditor = () => {
         syncWarning?: string;
       }>(`/${PLUGIN_ID}/builder/forms/${documentId}/publish${query}`);
       setPublished(true);
+      setPublishedHubspotFormId(entry.hubspotFormId ?? null);
       setErrors([]);
       setProblems([]);
       const added = Array.isArray(data?.addedFields) ? data.addedFields.length : 0;
@@ -815,7 +818,10 @@ const FormEditor = () => {
                     }
                   >
                     <SingleSelectOption value="">
-                      {t("editor.hubspot-form-none", "None — CRM upsert only")}
+                      {t(
+                        "editor.hubspot-form-none",
+                        "Default marketing form (Settings) — contact only if none is set",
+                      )}
                     </SingleSelectOption>
                     {entry.hubspotFormId &&
                       !hsForms.some((f) => f.id === entry.hubspotFormId) && (
@@ -844,6 +850,15 @@ const FormEditor = () => {
                     "Submissions go through HubSpot’s Forms API so they count as conversions. After you change the form in HubSpot, use Resync from HubSpot — mapped fields update in place, new ones are appended, your steps stay.",
                   )}
                 </Typography>
+                {published &&
+                  (entry.hubspotFormId || "") !== (publishedHubspotFormId || "") && (
+                    <Typography variant="pi" textColor="danger600">
+                      {t(
+                        "editor.hubspot-form-unpublished",
+                        "The live site still uses the previously published HubSpot form. Publish to apply this link.",
+                      )}
+                    </Typography>
+                  )}
               </Field.Root>
               <Typography variant="pi" textColor="neutral600">
                 {t(

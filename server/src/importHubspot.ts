@@ -81,8 +81,21 @@ export interface RawHubspotForm {
   name?: string;
   fieldGroups?: RawFieldGroup[];
   displayOptions?: { submitButtonText?: string };
-  configuration?: { postSubmitAction?: { type?: string; value?: string } };
-  legalConsentOptions?: { type?: string } | null;
+  configuration?: {
+    postSubmitAction?: { type?: string; value?: string };
+    captchaEnabled?: boolean;
+  };
+  legalConsentOptions?: {
+    type?: string;
+    consentToProcessText?: string;
+    communicationsCheckboxes?: {
+      required?: boolean;
+      label?: string;
+      text?: string;
+      subscriptionTypeId?: number | string;
+      communicationTypeId?: number | string;
+    }[];
+  } | null;
 }
 
 /* ------------------------------------------------------------------ */

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.16.4 — 2026-09-23
+
+### Fixed
+- A linked HubSpot form that refused the Forms API (GDPR communications,
+  CAPTCHA, extra required fields) silently fell back to a CRM upsert + note,
+  so the contact looked updated with no native submission. The submit now
+  sends `objectTypeId`, the form's communication consents, skips the
+  email-only retry when HubSpot requires other fields, and refuses CAPTCHA
+  forms with a stored error. Strapi Submissions distinguish **Conversion**
+  vs **Contact only**.
+
 ## 0.16.3 — 2026-09-22
 
 ### Changed

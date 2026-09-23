@@ -5,6 +5,9 @@ import {
   formsHost,
   formsSubmitUrl,
   isFormGuid,
+  parseFormShape,
+  buildLegalConsent,
+  canRetryEmailOnly,
   sanitizeHutk,
   sanitizePortalId,
   toHsFields,
@@ -63,5 +66,53 @@ describe("form field filtering", () => {
         ],
       }),
     ).toEqual(["email", "firstname", "phone"]);
+  });
+});
+
+describe("form shape / consent", () => {
+  it("reads CAPTCHA, required fields and communication checkboxes", () => {
+    const shape = parseFormShape({
+      fieldGroups: [
+        { fields: [{ name: "email", required: true }, { name: "firstname" }] },
+      ],
+      configuration: { captchaEnabled: true },
+      legalConsentOptions: {
+        type: "explicit_consent_to_process",
+        consentToProcessText: "J'accepte le traitement.",
+        communicationsCheckboxes: [
+          { subscriptionTypeId: 42, label: "Newsletter" },
+        ],
+      },
+    });
+    expect(shape.captcha).toBe(true);
+    expect([...shape.required]).toEqual(["email"]);
+    expect(shape.hasLegalConsent).toBe(true);
+    expect(shape.communications).toEqual([
+      { subscriptionTypeId: 42, text: "Newsletter" },
+    ]);
+  });
+
+  it("builds HubSpot legalConsentOptions with communications when the form has a GDPR block", () => {
+    const legal = buildLegalConsent(
+      {
+        hasLegalConsent: true,
+        consentToProcessText: "Traitement OK",
+        communications: [{ subscriptionTypeId: 7, text: "News" }],
+      },
+      true,
+    );
+    expect(legal).toEqual({
+      consent: {
+        consentToProcess: true,
+        text: "Traitement OK",
+        communications: [{ value: true, subscriptionTypeId: 7, text: "News" }],
+      },
+    });
+  });
+
+  it("does not retry email-only when HubSpot requires other fields", () => {
+    expect(canRetryEmailOnly(["email"])).toBe(true);
+    expect(canRetryEmailOnly(["email", "firstname"])).toBe(false);
+    expect(canRetryEmailOnly([])).toBe(true);
   });
 });

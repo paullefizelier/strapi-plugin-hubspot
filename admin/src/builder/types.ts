@@ -175,7 +175,7 @@ export interface SubmissionRowDto {
   formTitle?: string | null;
   email?: string | null;
   values: Record<string, string | number | boolean>;
-  meta?: Record<string, string> | null;
+  meta?: Record<string, unknown> | null;
   locale?: string | null;
   hubspotSynced?: boolean;
   createdAt?: string;

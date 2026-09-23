@@ -648,6 +648,26 @@ describe("forms.submit — hybrid conversion", () => {
     expect(input.properties.firstname).toBeUndefined();
   });
 
+  it("keeps the CRM fallback but records the Forms API error when a linked form refuses the conversion", async () => {
+    const { calls } = mockFetch({ formSubmitStatus: 400 });
+    const { strapi, rows } = makeStrapi({
+      stored: { portalId: "148991818" },
+    });
+    await service(strapi).submit(
+      { ...formEntry, hubspotFormId: GUID },
+      { email: "jane@gmail.com", firstname: "Jane" },
+      { ...meta, consent: true },
+    );
+    expect(calls.some((c) => c.path.includes("/integration/secure/submit/"))).toBe(true);
+    expect(calls.some((c) => c.path.endsWith("/contacts/batch/upsert"))).toBe(true);
+    const row = rows[SUBMISSION_UID][0];
+    expect(row.hubspotSynced).toBe(true);
+    expect(row.meta).toMatchObject({
+      hubspotConversion: false,
+      hubspotError: "bad form",
+    });
+  });
+
   it("skips the Forms API entirely in CRM mode even when a GUID is set", async () => {
     const { calls } = mockFetch();
     const { strapi } = makeStrapi({

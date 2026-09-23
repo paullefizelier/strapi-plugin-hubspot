@@ -581,6 +581,7 @@ export function createFormsService(
     // The install chooses how: Forms API conversions, CRM upsert, or both.
     let usedFormsApi = false;
     let sentFieldNames: string[] = [];
+    let conversionError: string | undefined;
     if (email && apiKey) {
       const groups = groupByObject(form.definition, resolution.values);
       for (const [object, props] of Object.entries(companyGroups)) {
@@ -630,7 +631,7 @@ export function createFormsService(
               ipAddress: sanitizeIp(meta.ipAddress),
             },
             consent: { given: meta.consent === true },
-            formHasLegalConsent: shape?.hasLegalConsent,
+            shape,
           });
           if (submitted.ok) {
             hubspotSynced = true;
@@ -643,10 +644,12 @@ export function createFormsService(
               );
             }
           } else {
+            conversionError = submitted.error;
             strapi.log.warn(`[hubspot] Forms API submit failed — ${submitted.error}`);
           }
         } catch (err) {
-          strapi.log.warn(`[hubspot] Forms API submit failed — ${(err as Error).message}`);
+          conversionError = (err as Error).message;
+          strapi.log.warn(`[hubspot] Forms API submit failed — ${conversionError}`);
         }
       }
 
@@ -747,7 +750,11 @@ export function createFormsService(
         formTitle: form.title || form.name,
         email,
         values: resolution.values,
-        meta,
+        meta: {
+          ...meta,
+          hubspotConversion: usedFormsApi,
+          ...(conversionError ? { hubspotError: conversionError } : {}),
+        },
         locale: form.locale ?? null,
         hubspotSynced,
         contactId,

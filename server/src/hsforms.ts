@@ -76,7 +76,7 @@ export function filterToFormFields(
 }
 
 export function formFieldNames(raw: {
-  fieldGroups?: { fields?: { name?: string }[] }[];
+  fieldGroups?: { fields?: { name?: string; required?: boolean }[] }[];
 }): string[] {
   const names: string[] = [];
   for (const group of raw.fieldGroups ?? []) {
@@ -85,6 +85,97 @@ export function formFieldNames(raw: {
     }
   }
   return names;
+}
+
+export function formRequiredNames(raw: {
+  fieldGroups?: { fields?: { name?: string; required?: boolean }[] }[];
+}): string[] {
+  const names: string[] = [];
+  for (const group of raw.fieldGroups ?? []) {
+    for (const field of group.fields ?? []) {
+      if (field.name && field.required) names.push(field.name);
+    }
+  }
+  return names;
+}
+
+export interface CommunicationConsent {
+  subscriptionTypeId: number;
+  text: string;
+}
+
+export interface FormShape {
+  names: Set<string>;
+  required: Set<string>;
+  hasLegalConsent: boolean;
+  captcha: boolean;
+  consentToProcessText?: string;
+  communications: CommunicationConsent[];
+}
+
+export function parseFormShape(raw: {
+  fieldGroups?: { fields?: { name?: string; required?: boolean }[] }[];
+  configuration?: { captchaEnabled?: boolean };
+  legalConsentOptions?: {
+    type?: string;
+    consentToProcessText?: string;
+    communicationsCheckboxes?: {
+      label?: string;
+      text?: string;
+      subscriptionTypeId?: number | string;
+      communicationTypeId?: number | string;
+    }[];
+  } | null;
+}): FormShape {
+  const legal = raw.legalConsentOptions;
+  const hasLegalConsent = Boolean(
+    legal && typeof legal === "object" && legal.type && legal.type !== "none",
+  );
+  const communications: CommunicationConsent[] = [];
+  for (const box of legal?.communicationsCheckboxes ?? []) {
+    const id = Number(box.subscriptionTypeId ?? box.communicationTypeId);
+    if (!Number.isFinite(id) || id <= 0) continue;
+    communications.push({
+      subscriptionTypeId: id,
+      text: String(box.label || box.text || "").trim() || "I agree to receive communications.",
+    });
+  }
+  const consentToProcessText = legal?.consentToProcessText?.trim();
+  return {
+    names: new Set(formFieldNames(raw)),
+    required: new Set(formRequiredNames(raw)),
+    hasLegalConsent,
+    captcha: raw.configuration?.captchaEnabled === true,
+    ...(consentToProcessText ? { consentToProcessText } : {}),
+    communications,
+  };
+}
+
+/** Email-only retry is only safe when HubSpot doesn't require other fields. */
+export function canRetryEmailOnly(required: Iterable<string> | undefined): boolean {
+  const names = [...(required ?? [])];
+  return names.length === 0 || names.every((name) => name === "email");
+}
+
+export function buildLegalConsent(
+  shape: Pick<FormShape, "hasLegalConsent" | "communications" | "consentToProcessText"> | null | undefined,
+  given: boolean,
+  fallbackText?: string,
+): Record<string, unknown> | undefined {
+  if (!given) return undefined;
+  if (shape && !shape.hasLegalConsent) return undefined;
+  const consent: Record<string, unknown> = {
+    consentToProcess: true,
+    text: shape?.consentToProcessText?.trim() || fallbackText?.trim() || DEFAULT_CONSENT_TEXT,
+  };
+  if (shape?.communications.length) {
+    consent.communications = shape.communications.map((item) => ({
+      value: true,
+      subscriptionTypeId: item.subscriptionTypeId,
+      text: item.text,
+    }));
+  }
+  return { consent };
 }
 
 export interface FormSubmitContext {
@@ -99,16 +190,13 @@ export interface FormSubmitInput {
   portalId: string;
   formGuid: string;
   region?: string;
-  fields: { name: string; value: string }[];
+  fields: { name: string; value: string; objectTypeId?: string }[];
   context?: FormSubmitContext;
   consent?: { given: boolean; text?: string };
-  formHasLegalConsent?: boolean;
+  shape?: FormShape | null;
 }
 
-const shapeCache = new Map<
-  string,
-  { at: number; names: Set<string>; hasLegalConsent: boolean }
->();
+const shapeCache = new Map<string, { at: number; shape: FormShape }>();
 
 export function clearFormShapeCache(formGuid?: string): void {
   if (formGuid) shapeCache.delete(formGuid);
@@ -118,22 +206,16 @@ export function clearFormShapeCache(formGuid?: string): void {
 export async function loadFormShape(
   apiKey: string,
   formGuid: string,
-): Promise<{ names: Set<string>; hasLegalConsent: boolean } | null> {
+): Promise<FormShape | null> {
   const cached = shapeCache.get(formGuid);
   if (cached && Date.now() - cached.at < SHAPE_TTL_MS) {
-    return { names: cached.names, hasLegalConsent: cached.hasLegalConsent };
+    return cached.shape;
   }
   try {
     const raw = await fetchHubspotForm(apiKey, formGuid);
-    const names = new Set(formFieldNames(raw));
-    const hasLegalConsent = Boolean(
-      raw.legalConsentOptions &&
-        typeof raw.legalConsentOptions === "object" &&
-        raw.legalConsentOptions.type &&
-        raw.legalConsentOptions.type !== "none",
-    );
-    shapeCache.set(formGuid, { at: Date.now(), names, hasLegalConsent });
-    return { names, hasLegalConsent };
+    const shape = parseFormShape(raw);
+    shapeCache.set(formGuid, { at: Date.now(), shape });
+    return shape;
   } catch {
     return null;
   }
@@ -201,8 +283,11 @@ async function postForm(
 
 /**
  * Submit a marketing form. Extra fields HubSpot doesn't know on that form
- * 400 the whole request, so callers should filter first; we still retry
- * without legal-consent and then email-only if HubSpot refuses the payload.
+ * 400 the whole request, so callers should filter first. A GDPR block on the
+ * HubSpot form needs the matching legalConsentOptions (including
+ * communications); stripping consent to "retry" would 400 forever. Email-only
+ * retry is only used when HubSpot doesn't require other fields. CAPTCHA
+ * cannot be solved server-side.
  */
 export async function submitMarketingForm(
   input: FormSubmitInput,
@@ -212,33 +297,53 @@ export async function submitMarketingForm(
   if (!portalId || !isFormGuid(formGuid) || !input.fields.length) {
     return { ok: false, status: 0, error: "Missing portal, form GUID or fields" };
   }
+  if (input.shape?.captcha) {
+    return {
+      ok: false,
+      status: 0,
+      error:
+        "HubSpot form has CAPTCHA enabled — the Forms API cannot submit it. Turn CAPTCHA off on that marketing form.",
+    };
+  }
   const url = formsSubmitUrl(portalId, formGuid, input.region);
   const context = contextPayload(input.context);
+  const fields = input.fields.map((field) => ({
+    objectTypeId: field.objectTypeId || "0-1",
+    name: field.name,
+    value: field.value,
+  }));
   const base: Record<string, unknown> = {
-    fields: input.fields,
+    fields,
     ...(Object.keys(context).length ? { context } : {}),
   };
 
-  const withConsent =
-    input.consent?.given && input.formHasLegalConsent !== false
-      ? {
-          ...base,
-          legalConsentOptions: {
-            consent: {
-              consentToProcess: true,
-              text: input.consent.text?.trim() || DEFAULT_CONSENT_TEXT,
-            },
-          },
-        }
-      : base;
+  const legal = buildLegalConsent(
+    input.shape,
+    input.consent?.given === true,
+    input.consent?.text,
+  );
+  const withConsent = legal ? { ...base, legalConsentOptions: legal } : base;
 
   let result = await postForm(url, input.apiKey, withConsent);
-  if (!result.ok && result.status === 400 && withConsent !== base) {
+  const mustKeepConsent = Boolean(input.shape?.hasLegalConsent && legal);
+  if (!result.ok && result.status === 400 && withConsent !== base && !mustKeepConsent) {
     result = await postForm(url, input.apiKey, base);
   }
-  if (!result.ok && result.status === 400 && input.fields.length > 1) {
-    const email = input.fields.find((f) => f.name === "email");
-    if (email) result = await postForm(url, input.apiKey, { ...base, fields: [email] });
+  if (
+    !result.ok &&
+    result.status === 400 &&
+    input.fields.length > 1 &&
+    canRetryEmailOnly(input.shape?.required)
+  ) {
+    const email = fields.find((f) => f.name === "email");
+    if (email) {
+      const slim = { ...base, fields: [email] };
+      result = await postForm(
+        url,
+        input.apiKey,
+        legal && mustKeepConsent ? { ...slim, legalConsentOptions: legal } : slim,
+      );
+    }
   }
   return result;
 }

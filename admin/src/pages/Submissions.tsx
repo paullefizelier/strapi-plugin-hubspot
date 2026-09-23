@@ -215,9 +215,13 @@ const Submissions = () => {
                     </Typography>
                   </Td>
                   <Td>
-                    {row.hubspotSynced ? (
+                    {row.meta?.hubspotConversion === true || row.meta?.hubspotConversion === "true" ? (
                       <Badge backgroundColor="success100" textColor="success700">
-                        {t("submissions.synced", "Synced")}
+                        {t("submissions.converted", "Conversion")}
+                      </Badge>
+                    ) : row.hubspotSynced ? (
+                      <Badge backgroundColor="warning100" textColor="warning700">
+                        {t("submissions.contact-only", "Contact only")}
                       </Badge>
                     ) : (
                       <Badge backgroundColor="warning100" textColor="warning700">
@@ -281,7 +285,15 @@ const Submissions = () => {
                     <Typography variant="sigma" textColor="neutral600" tag="p">
                       {t("submissions.meta-page", "Submitted from")}
                     </Typography>
-                    <Typography tag="p">{selected.meta.pagePath}</Typography>
+                    <Typography tag="p">{String(selected.meta.pagePath)}</Typography>
+                  </Box>
+                )}
+                {typeof selected.meta?.hubspotError === "string" && selected.meta.hubspotError && (
+                  <Box>
+                    <Typography variant="sigma" textColor="danger600" tag="p">
+                      {t("submissions.conversion-error", "Conversion failed")}
+                    </Typography>
+                    <Typography tag="p">{selected.meta.hubspotError}</Typography>
                   </Box>
                 )}
               </Flex>
