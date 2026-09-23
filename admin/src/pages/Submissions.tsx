@@ -280,12 +280,12 @@ const Submissions = () => {
                     <Typography tag="p">{String(value)}</Typography>
                   </Box>
                 ))}
-                {selected.meta?.pagePath && (
+                {typeof selected.meta?.pagePath === "string" && selected.meta.pagePath && (
                   <Box>
                     <Typography variant="sigma" textColor="neutral600" tag="p">
                       {t("submissions.meta-page", "Submitted from")}
                     </Typography>
-                    <Typography tag="p">{String(selected.meta.pagePath)}</Typography>
+                    <Typography tag="p">{selected.meta.pagePath}</Typography>
                   </Box>
                 )}
                 {typeof selected.meta?.hubspotError === "string" && selected.meta.hubspotError && (
