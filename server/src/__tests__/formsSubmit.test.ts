@@ -56,7 +56,7 @@ function mockFetch({
   companyFound?: boolean;
   noteStatus?: number;
   sirene?: (query: string) => { status: number; body: unknown };
-  formShape?: { fieldGroups?: { fields?: { name?: string }[] }[] };
+  formShape?: { fieldGroups?: { fields?: { name?: string; objectTypeId?: string }[] }[] };
   formSubmitStatus?: number;
 } = {}) {
   let upsertAttempts = 0;

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.16.7 — 2026-09-23
+
+### Fixed
+- Admin TypeScript build of 0.16.6 (test fixture `objectTypeId`). Same
+  legitimate-interest / company-field conversion fix.
+
 ## 0.16.6 — 2026-09-23
 
 ### Fixed
