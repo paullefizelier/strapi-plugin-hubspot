@@ -78,7 +78,9 @@ export function publicForm(entry: FormEntry): PublicForm {
     steps: (entry.definition?.steps ?? []).map((step) => ({
       ...step,
       // The CRM mappings are the server's business — never the browser's.
-      fields: (step.fields ?? []).map(({ hubspot: _hubspot, companyMap: _companyMap, ...fld }) => fld),
+      fields: (step.fields ?? []).map(
+        ({ hubspot: _hubspot, companyMap: _companyMap, visibleIfSource: _source, ...fld }) => fld,
+      ),
     })),
   };
 }

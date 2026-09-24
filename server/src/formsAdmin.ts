@@ -9,7 +9,8 @@
 import type { Core } from "@strapi/strapi";
 import { validateDefinition, type FormDefinition } from "./conditions";
 import { mappingProblems, SUBMISSION_UID, type FormEntry } from "./forms";
-import { isFormGuid, syncFieldsToHubspotForm } from "./hsforms";
+import { missingRequiredHubspotFields } from "./formSync";
+import { isFormGuid, loadFormShape, createMarketingForm, syncFieldsToHubspotForm } from "./hsforms";
 import { convertHubspotForm, fetchHubspotForm, listHubspotForms, mergeHubspotImport } from "./importHubspot";
 import { convertLegacyForm, type ImportMap } from "./importLegacy";
 import { loadSchema, resolveObjects, type Problem } from "./properties";
@@ -217,6 +218,30 @@ export function createFormsAdminController(strapi: Core.Strapi) {
         ctx.body = { errors: structural, problems: mappings };
         return;
       }
+
+      const { apiKey } = await resolveApiKey(strapi);
+      const account = await resolveAccount(strapi);
+      const ownGuid = typeof entry.hubspotFormId === "string" ? entry.hubspotFormId.trim() : "";
+      const formGuid = isFormGuid(ownGuid)
+        ? ownGuid
+        : isFormGuid(account.defaultFormId)
+          ? account.defaultFormId.trim()
+          : "";
+      if (apiKey && formGuid) {
+        const shape = await loadFormShape(apiKey, formGuid);
+        const missingHubspot = shape
+          ? missingRequiredHubspotFields(
+              entry.definition ?? EMPTY_DEFINITION,
+              [...shape.fields.filter((field) => field.required)],
+            )
+          : [];
+        if (missingHubspot.length) {
+          (ctx as unknown as { status: number }).status = 400;
+          ctx.body = { errors: structural, problems: mappings, missingHubspot };
+          return;
+        }
+      }
+
       await documents().publish({
         documentId: ctx.params.documentId!,
         locale: ctx.query.locale,
@@ -225,26 +250,16 @@ export function createFormsAdminController(strapi: Core.Strapi) {
       const policy = await resolvePolicy(strapi);
       let addedFields: string[] = [];
       let syncWarning: string | undefined;
-      if (policy.syncFieldsOnPublish) {
-        const { apiKey } = await resolveApiKey(strapi);
-        const account = await resolveAccount(strapi);
-        const ownGuid = typeof entry.hubspotFormId === "string" ? entry.hubspotFormId.trim() : "";
-        const formGuid = isFormGuid(ownGuid)
-          ? ownGuid
-          : isFormGuid(account.defaultFormId)
-            ? account.defaultFormId.trim()
-            : "";
-        if (apiKey && formGuid) {
-          try {
-            addedFields = await syncFieldsToHubspotForm(
-              apiKey,
-              formGuid,
-              entry.definition ?? EMPTY_DEFINITION,
-            );
-          } catch (err) {
-            syncWarning = (err as Error).message;
-            strapi.log.warn(`[hubspot] field sync on publish failed — ${syncWarning}`);
-          }
+      if (policy.syncFieldsOnPublish && apiKey && formGuid) {
+        try {
+          addedFields = await syncFieldsToHubspotForm(
+            apiKey,
+            formGuid,
+            entry.definition ?? EMPTY_DEFINITION,
+          );
+        } catch (err) {
+          syncWarning = (err as Error).message;
+          strapi.log.warn(`[hubspot] field sync on publish failed — ${syncWarning}`);
         }
       }
       ctx.body = {
@@ -252,6 +267,32 @@ export function createFormsAdminController(strapi: Core.Strapi) {
         ...(addedFields.length ? { addedFields } : {}),
         ...(syncWarning ? { syncWarning } : {}),
       };
+    },
+
+    async createInHubspot(ctx: Ctx) {
+      const entry = (await documents().findOne({
+        documentId: ctx.params.documentId!,
+        locale: ctx.query.locale,
+        status: "draft",
+      } as never)) as unknown as FormEntry | null;
+      if (!entry) ctx.throw(404, "Form not found");
+      const { apiKey } = await resolveApiKey(strapi);
+      if (!apiKey) ctx.throw(400, "HubSpot API key is missing");
+      try {
+        const id = await createMarketingForm(
+          apiKey,
+          entry.name || entry.slug || "Formulaire",
+          entry.definition ?? EMPTY_DEFINITION,
+        );
+        const updated = await documents().update({
+          documentId: ctx.params.documentId!,
+          locale: ctx.query.locale,
+          data: { hubspotFormId: id } as never,
+        } as never);
+        ctx.body = { form: updated, hubspotFormId: id };
+      } catch (err) {
+        ctx.throw(400, (err as Error).message);
+      }
     },
 
     async unpublish(ctx: Ctx) {

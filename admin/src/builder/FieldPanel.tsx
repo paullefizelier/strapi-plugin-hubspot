@@ -396,7 +396,7 @@ const FieldPanel = ({ field, candidates, problem, onChange }: Props) => {
         <ConditionEditor
           condition={field.visibleIf}
           candidates={candidates}
-          onChange={(visibleIf) => onChange({ visibleIf })}
+          onChange={(visibleIf) => onChange({ visibleIf, visibleIfSource: "editor" })}
         />
       </Flex>
     </Flex>

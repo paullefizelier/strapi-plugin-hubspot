@@ -103,6 +103,7 @@ export interface FormField {
   /** Company fields: rotating placeholder examples, one per line. */
   placeholderExamples?: string[];
   visibleIf?: Condition | null;
+  visibleIfSource?: "hubspot" | "editor" | null;
 }
 
 export interface FormStep {
@@ -163,7 +164,8 @@ export interface SkippedItem {
     | "duplicate"
     | "condition"
     | "rich-text"
-    | "legal-consent";
+    | "legal-consent"
+    | "progressive";
   label?: string;
   detail?: string;
 }

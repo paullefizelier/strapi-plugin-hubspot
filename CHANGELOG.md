@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.16.8 — 2026-09-24
+
+### Added
+- Publishing a form linked to HubSpot is blocked when a required marketing
+  field is not collected. Submissions show the conversion error next to
+  **Contact only**.
+- **Create in HubSpot** builds a marketing form from the Strapi definition
+  and stores its GUID.
+- Resync updates conditions that came from HubSpot and leaves editor-written
+  ones. With field sync on, `visibleIf` is pushed back as HubSpot dependent
+  fields. Progressive groups are reported on import.
+
 ## 0.16.7 — 2026-09-23
 
 ### Fixed

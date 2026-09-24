@@ -265,6 +265,7 @@ const FormEditor = () => {
         ok?: boolean;
         addedFields?: string[];
         syncWarning?: string;
+        missingHubspot?: { name: string; object: string }[];
       }>(`/${PLUGIN_ID}/builder/forms/${documentId}/publish${query}`);
       setPublished(true);
       setPublishedHubspotFormId(entry.hubspotFormId ?? null);
@@ -294,13 +295,26 @@ const FormEditor = () => {
       }
     } catch (err) {
       const data = (err as {
-        response?: { data?: { errors?: DefinitionError[]; problems?: MappingProblem[] } };
+        response?: {
+          data?: {
+            errors?: DefinitionError[];
+            problems?: MappingProblem[];
+            missingHubspot?: { name: string; object: string }[];
+          };
+        };
       }).response?.data;
       setErrors(data?.errors ?? []);
       setProblems(data?.problems ?? []);
+      const missing = data?.missingHubspot ?? [];
       setFeedback({
         tone: "danger",
-        text: t("editor.publish-blocked", "Publishing is blocked — fix the flagged mappings first."),
+        text: missing.length
+          ? t(
+              "editor.publish-missing-hubspot",
+              "Publishing is blocked — the linked HubSpot form requires {fields}, which this form does not collect.",
+              { fields: missing.map((field) => `${field.object}.${field.name}`).join(", ") },
+            )
+          : t("editor.publish-blocked", "Publishing is blocked — fix the flagged mappings first."),
       });
     } finally {
       setBusy(false);
@@ -315,6 +329,31 @@ const FormEditor = () => {
       setFeedback({ tone: "success", text: t("editor.unpublished", "Form unpublished.") });
     } catch {
       setFeedback({ tone: "danger", text: t("editor.unpublish-error", "Could not unpublish.") });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createInHubspot = async () => {
+    if (dirty && !(await save())) return;
+    setBusy(true);
+    setFeedback(null);
+    try {
+      const { data } = await post<{ form?: FormEntryDto; hubspotFormId?: string }>(
+        `/${PLUGIN_ID}/builder/forms/${documentId}/create-hubspot${query}`,
+      );
+      if (data.form) setEntry(data.form);
+      setFeedback({
+        tone: "success",
+        text: t("editor.created-hubspot", "HubSpot form created and linked."),
+      });
+    } catch (err) {
+      const message = (err as { response?: { data?: { error?: { message?: string } } } }).response?.data
+        ?.error?.message;
+      setFeedback({
+        tone: "danger",
+        text: message || t("editor.create-hubspot-error", "Could not create the HubSpot form."),
+      });
     } finally {
       setBusy(false);
     }
@@ -437,6 +476,13 @@ const FormEditor = () => {
             disabled={busy || !entry.hubspotFormId}
           >
             {t("editor.resync", "Resync from HubSpot")}
+          </Button>
+          <Button
+            variant="tertiary"
+            onClick={createInHubspot}
+            disabled={busy || Boolean(entry.hubspotFormId)}
+          >
+            {t("editor.create-hubspot", "Create in HubSpot")}
           </Button>
           <Button onClick={publish} disabled={busy}>
             {t("editor.publish", "Publish")}

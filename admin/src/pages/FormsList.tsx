@@ -135,6 +135,12 @@ const FormsList = () => {
         return t("forms.skipped-rich-text", "A content block was skipped — the builder has no rich-text element");
       case "legal-consent":
         return t("forms.skipped-consent", "The GDPR consent block was skipped — rebuild it as a field if needed");
+      case "progressive":
+        return t(
+          "forms.skipped-progressive",
+          "A progressive field group was skipped — it is not a visibility condition ({detail})",
+          { detail: item.detail ?? "" },
+        );
     }
   };
 

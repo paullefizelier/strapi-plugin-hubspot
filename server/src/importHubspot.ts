@@ -33,7 +33,8 @@ export interface SkippedItem {
     | "duplicate" // second occurrence of a property name (names must be unique)
     | "condition" // dependent-field logic the condition engine can't express
     | "rich-text" // content blocks between fields
-    | "legal-consent"; // GDPR consent block — must be rebuilt as a field
+    | "legal-consent" // GDPR consent block — must be rebuilt as a field
+    | "progressive"; // progressive / queued groups are not visibility conditions
   /** Field label or name, when the item is a field. */
   label?: string;
   /** Raw detail (the fieldType, the operator…) for the report. */
@@ -72,6 +73,7 @@ interface RawField {
 }
 
 interface RawFieldGroup {
+  groupType?: string;
   richText?: string;
   fields?: RawField[];
 }
@@ -221,7 +223,7 @@ function convertField(
     helpText: raw.description || undefined,
     ...(options.length ? { options } : {}),
     hubspot: { object, property: name },
-    ...(ctx.parentCondition ? { visibleIf: ctx.parentCondition } : {}),
+    ...(ctx.parentCondition ? { visibleIf: ctx.parentCondition, visibleIfSource: "hubspot" as const } : {}),
   };
 
   const out = [field];
@@ -251,6 +253,12 @@ export function convertHubspotForm(raw: RawHubspotForm): ConvertedHubspotForm {
   const fields: FormFieldDef[] = [];
 
   for (const group of raw.fieldGroups ?? []) {
+    if (group.groupType === "progressive" || group.groupType === "queued") {
+      skipped.push({
+        code: "progressive",
+        detail: group.groupType,
+      });
+    }
     if (group.richText && !(group.fields ?? []).length) {
       // Standalone content block — the builder has no rich-text element.
       skipped.push({ code: "rich-text", detail: group.richText.slice(0, 80) });
@@ -350,7 +358,10 @@ export function mergeHubspotImport(
       existing.helpText = next.helpText;
       if (next.options) existing.options = next.options;
       else delete existing.options;
-      if (!existing.visibleIf && next.visibleIf) existing.visibleIf = next.visibleIf;
+      if (next.visibleIf && (existing.visibleIfSource === "hubspot" || !existing.visibleIf)) {
+        existing.visibleIf = next.visibleIf;
+        if (existing.visibleIfSource !== "editor") existing.visibleIfSource = "hubspot";
+      }
       updated.push(key!);
       continue;
     }

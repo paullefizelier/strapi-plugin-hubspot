@@ -6,6 +6,7 @@ import {
   leftoverContactProps,
   mappedContactFields,
   missingMappedFields,
+  missingRequiredHubspotFields,
   toHsFormField,
 } from "../formSync";
 
@@ -127,6 +128,35 @@ describe("appendFieldGroups", () => {
     expect(groups[1]?.fields).toEqual([
       expect.objectContaining({ name: "city", fieldType: "single_line_text" }),
     ]);
+  });
+});
+
+describe("missingRequiredHubspotFields", () => {
+  it("lists HubSpot required fields the Strapi form does not collect", () => {
+    const withCompany: FormDefinition = {
+      version: 1,
+      steps: [
+        {
+          id: "s",
+          fields: [
+            ...definition.steps[0]!.fields,
+            {
+              id: "fld_co",
+              name: "entreprise",
+              type: "company",
+              companyMap: { name: { object: "company", property: "name" } },
+            },
+          ],
+        },
+      ],
+    };
+    expect(
+      missingRequiredHubspotFields(withCompany, [
+        { name: "email", objectTypeId: "0-1" },
+        { name: "name", objectTypeId: "0-2" },
+        { name: "genre", objectTypeId: "0-1" },
+      ]),
+    ).toEqual([{ name: "genre", objectTypeId: "0-1", object: "contact" }]);
   });
 });
 

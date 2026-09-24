@@ -39,6 +39,7 @@ export interface FormFieldDef {
   type: string;
   required?: boolean;
   visibleIf?: Condition | null;
+  visibleIfSource?: "hubspot" | "editor" | null;
   [key: string]: unknown;
 }
 

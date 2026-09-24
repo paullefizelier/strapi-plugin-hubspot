@@ -11,7 +11,7 @@
  * production tomorrow, no code change.
  */
 
-import { appendFieldGroups, missingMappedFields } from "./formSync";
+import { appendFieldGroups, applyVisibleIfToFieldGroups, mappedContactFields, missingMappedFields, toHsFormField } from "./formSync";
 import type { FormDefinition } from "./conditions";
 import { fetchHubspotForm, patchHubspotForm } from "./importHubspot";
 
@@ -449,10 +449,65 @@ export async function syncFieldsToHubspotForm(
 ): Promise<string[]> {
   const raw = await fetchHubspotForm(apiKey, formGuid);
   const extra = missingMappedFields(definition, formFieldNames(raw));
-  if (!extra.length) return [];
-  await patchHubspotForm(apiKey, formGuid, {
-    fieldGroups: appendFieldGroups(raw.fieldGroups ?? [], extra),
-  });
+  const fieldGroups = applyVisibleIfToFieldGroups(
+    appendFieldGroups(raw.fieldGroups ?? [], extra),
+    definition,
+  );
+  if (!extra.length && JSON.stringify(fieldGroups) === JSON.stringify(appendFieldGroups(raw.fieldGroups ?? [], []))) {
+    return [];
+  }
+  await patchHubspotForm(apiKey, formGuid, { fieldGroups });
   clearFormShapeCache(formGuid);
   return extra.map((field) => field.property);
+}
+
+/** Create a marketing form from the Strapi definition and return its GUID. */
+export async function createMarketingForm(
+  apiKey: string,
+  name: string,
+  definition: FormDefinition,
+): Promise<string> {
+  const fields = mappedContactFields(definition).map((field) => toHsFormField(field));
+  if (!fields.length) {
+    throw new Error("Add at least one mapped contact field before creating a HubSpot form");
+  }
+  const res = await fetch("https://api.hubapi.com/marketing/v3/forms", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name,
+      formType: "hubspot",
+      fieldGroups: applyVisibleIfToFieldGroups(
+        fields.map((field) => ({
+          groupType: "default_group",
+          richTextType: "text",
+          fields: [field],
+        })),
+        definition,
+      ),
+      configuration: {
+        language: "fr",
+        recaptchaEnabled: false,
+        createNewContactForNewEmail: true,
+        prePopulateKnownValues: true,
+        notifyContactOwner: false,
+        notifyRecipients: [],
+        editable: true,
+        archivable: true,
+        cloneable: true,
+        allowLinkToResetKnownValues: false,
+        postSubmitAction: { type: "thank_you", value: "Merci." },
+      },
+      displayOptions: { submitButtonText: "Envoyer", style: { submitButtonText: "Envoyer" } },
+      legalConsentOptions: { type: "none" },
+    }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
+  if (!res.ok || !body.id) {
+    throw new Error(body.message || `HubSpot ${res.status}`);
+  }
+  return body.id;
 }

@@ -220,9 +220,16 @@ const Submissions = () => {
                         {t("submissions.converted", "Conversion")}
                       </Badge>
                     ) : row.hubspotSynced ? (
-                      <Badge backgroundColor="warning100" textColor="warning700">
-                        {t("submissions.contact-only", "Contact only")}
-                      </Badge>
+                      <Flex direction="column" alignItems="flex-start" gap={1}>
+                        <Badge backgroundColor="warning100" textColor="warning700">
+                          {t("submissions.contact-only", "Contact only")}
+                        </Badge>
+                        {typeof row.meta?.hubspotError === "string" && row.meta.hubspotError && (
+                          <Typography variant="pi" textColor="danger600">
+                            {row.meta.hubspotError}
+                          </Typography>
+                        )}
+                      </Flex>
                     ) : (
                       <Badge backgroundColor="warning100" textColor="warning700">
                         {t("submissions.not-synced", "Not synced")}

@@ -374,6 +374,7 @@ const routes = {
       adminRoute("GET", "/builder/forms/:documentId", "formsAdmin.findOne", [FORMS_ACTION]),
       adminRoute("PUT", "/builder/forms/:documentId", "formsAdmin.update", [FORMS_ACTION]),
       adminRoute("POST", "/builder/forms/:documentId/publish", "formsAdmin.publish", [FORMS_ACTION]),
+      adminRoute("POST", "/builder/forms/:documentId/create-hubspot", "formsAdmin.createInHubspot", [FORMS_ACTION]),
       adminRoute("POST", "/builder/forms/:documentId/unpublish", "formsAdmin.unpublish", [FORMS_ACTION]),
       adminRoute("DELETE", "/builder/forms/:documentId", "formsAdmin.remove", [FORMS_ACTION]),
       adminRoute("POST", "/builder/forms/:documentId/duplicate", "formsAdmin.duplicate", [FORMS_ACTION]),
