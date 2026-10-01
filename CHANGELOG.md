@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.16.9 — 2026-10-01
+
+### Fixed
+- **Brand-new leads silently lost their timeline note and company
+  association** after a Forms API conversion: the contact id was resolved
+  through the Search API, whose index lags by seconds to minutes on freshly
+  created records — so the contact the conversion itself just created was
+  invisible, and the note/association steps were skipped without a warning.
+  The lookup now uses the direct object endpoint
+  (`GET /crm/v3/objects/contacts/{email}?idProperty=email`), which reads the
+  object store (no index lag), with a short 404 retry (~1.6 s budget) since
+  the conversion is processed asynchronously. Existing contacts are
+  unaffected; any non-404 error still gives up immediately.
+
 ## 0.16.8 — 2026-09-24
 
 ### Added
