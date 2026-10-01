@@ -310,27 +310,35 @@ export async function loadFormShape(
   }
 }
 
+/**
+ * The contact's id right after a Forms API conversion, via the DIRECT object
+ * lookup (`idProperty=email`) — never the Search API: the search index lags by
+ * seconds to minutes on freshly created records, so a contact the conversion
+ * itself just created was invisible, silently costing brand-new leads their
+ * timeline note and company association. The object store has no such lag.
+ *
+ * The conversion is processed asynchronously on HubSpot's side, so a 404 is
+ * retried briefly (the delays are injectable for tests). Any other error
+ * (auth, 5xx) gives up immediately — retrying wouldn't change it.
+ */
 export async function findContactIdByEmail(
   apiKey: string,
   email: string,
+  retryDelaysMs: readonly number[] = [400, 1200],
 ): Promise<string | undefined> {
-  const res = await fetch("https://api.hubapi.com/crm/v3/objects/contacts/search", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      filterGroups: [
-        { filters: [{ propertyName: "email", operator: "EQ", value: email }] },
-      ],
-      properties: ["email"],
-      limit: 1,
-    }),
-  });
-  const body = (await res.json().catch(() => ({}))) as { results?: { id?: string }[] };
-  if (!res.ok) return undefined;
-  return body.results?.[0]?.id;
+  for (const delay of [0, ...retryDelaysMs]) {
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+    const res = await fetch(
+      `https://api.hubapi.com/crm/v3/objects/contacts/${encodeURIComponent(email)}?idProperty=email`,
+      { headers: { Authorization: `Bearer ${apiKey}` } },
+    );
+    if (res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { id?: string };
+      return body.id || undefined;
+    }
+    if (res.status !== 404) return undefined;
+  }
+  return undefined;
 }
 
 function contextPayload(ctx: FormSubmitContext | undefined): Record<string, string> {

@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   filterToFormFields,
   fieldsForHubspotForm,
+  findContactIdByEmail,
   formFieldNames,
   formsHost,
   formsSubmitUrl,
@@ -164,5 +165,62 @@ describe("form shape / consent", () => {
       { name: "email", value: "a@b.co", objectTypeId: "0-1" },
       { name: "name", value: "Acme", objectTypeId: "0-2" },
     ]);
+  });
+});
+
+describe("findContactIdByEmail", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const respond = (status: number, body: unknown) => ({
+    ok: status < 400,
+    status,
+    json: async () => body,
+  });
+
+  it("resolves through the direct object lookup, email encoded, never the Search API", async () => {
+    const fetchMock = vi.fn(async () => respond(200, { id: "123" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(findContactIdByEmail("key", "a+b@acme.fr")).resolves.toBe("123");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, { headers: Record<string, string> }];
+    expect(url).toBe("https://api.hubapi.com/crm/v3/objects/contacts/a%2Bb%40acme.fr?idProperty=email");
+    expect(init.headers.Authorization).toBe("Bearer key");
+  });
+
+  it("retries a 404 — the conversion is asynchronous — and picks up the late contact", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(respond(404, {}))
+      .mockResolvedValueOnce(respond(200, { id: "late-1" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(findContactIdByEmail("key", "new@acme.fr", [0, 0])).resolves.toBe("late-1");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up after the retry budget when the contact never appears", async () => {
+    const fetchMock = vi.fn(async () => respond(404, {}));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(findContactIdByEmail("key", "ghost@acme.fr", [0, 0])).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("stops immediately on a non-404 error — retrying an auth failure changes nothing", async () => {
+    const fetchMock = vi.fn(async () => respond(401, { message: "nope" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(findContactIdByEmail("key", "a@acme.fr", [0, 0])).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a 200 without id as not found", async () => {
+    const fetchMock = vi.fn(async () => respond(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(findContactIdByEmail("key", "odd@acme.fr", [])).resolves.toBeUndefined();
   });
 });

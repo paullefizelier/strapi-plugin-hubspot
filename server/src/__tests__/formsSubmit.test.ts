@@ -88,8 +88,14 @@ function mockFetch({
     if (path.startsWith("/marketing/v3/forms/")) {
       return respond(200, formShape ?? { fieldGroups: [{ fields: [{ name: "email" }] }] });
     }
-    if (path.endsWith("/contacts/search")) {
-      return respond(200, { results: [{ id: "contact-1" }] });
+    // Direct object lookup by email (idProperty=email) — what the pipeline
+    // uses to resolve the contact right after a Forms API conversion.
+    if (
+      call.method === "GET" &&
+      path.startsWith("/crm/v3/objects/contacts/") &&
+      parsed.searchParams.get("idProperty") === "email"
+    ) {
+      return respond(200, { id: "contact-1" });
     }
     if (path.endsWith("/contacts/batch/upsert")) {
       upsertAttempts += 1;
